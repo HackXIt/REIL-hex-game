@@ -1,0 +1,3 @@
+[submodule "hex-game-paper"]
+	path = hex-game-paper
+	url = ../hex-game-paper.git
