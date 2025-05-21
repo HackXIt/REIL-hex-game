@@ -3,15 +3,15 @@ def main() -> None:
     #note that python does not search directory trees, hence you must provide the mother-directory of the package
 
     #importing the module
-    import hex_engine as engine
+    from .hex_engine import hexPosition
 
     #initializing a game object
-    game = engine.hexPosition()
+    game = hexPosition()
 
     #this is how your agent can be imported
     #'submission' is the (sub)package that you provide
     #please use a better name that identifies your group
-    from submission.facade import agent
+    from .submission.facade import agent
 
     #make sure that the agent you have provided is such that the following three
     #method-calls are error-free and as expected

@@ -7,7 +7,7 @@ requires-python = ">=3.9,<3.13"
 dependencies = []
 
 [project.scripts]
-reil-hex-game = "src/reil_hex_game"
+reil-hex-game = "reil_hex_game:main"
 
 [build-system]
 requires = ["hatchling"]
