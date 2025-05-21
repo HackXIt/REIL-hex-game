@@ -175,3 +175,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+!src/reil_hex_game/__pycache__/
+
+# Provided pycache by course
+!src/reil_hex_game/__pycache__/__init__.cpython-311.pyc
+!src/reil_hex_game/__pycache__/hex_engine.cpython-311.pyc
+!src/reil_hex_game/__pycache__/hex_engine.cpython-312.pyc

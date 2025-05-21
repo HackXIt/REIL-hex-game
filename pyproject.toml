@@ -1,7 +1,14 @@
 [project]
 name = "reil-hex-game"
 version = "0.1.0"
-description = "Add your description here"
+description = "A reinforcement learning project to play the hex game"
 readme = "README.md"
 requires-python = ">=3.9,<3.13"
 dependencies = []
+
+[project.scripts]
+reil-hex-game = "src/reil_hex_game"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
