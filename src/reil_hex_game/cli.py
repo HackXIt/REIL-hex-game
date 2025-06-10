@@ -9,7 +9,7 @@ Key improvements in this revision
   ``reil_hex_game.agents.rule_based_agent:rule_based_agent``.
 * The *interactive wizard* suggests **rule_based** as the default agent when a
   bot is required.
-* Still accepts fully-qualified *module:attr* paths for custom agents.
+* Accepts fully-qualified *module:attr* paths for custom agents.
 """
 from __future__ import annotations
 

@@ -16,6 +16,7 @@ class GameState:
         self.status_message: str = ""
         self.engine: hexPosition = None
         self.step_event = None
+        self.click_event = None
         # graceful shutdown flag (gets filled by hex_engine)
         self.shutdown_event = None
         self.auto_mode      = False  # bool – set by engine / Enter key

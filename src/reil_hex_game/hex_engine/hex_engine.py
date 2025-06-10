@@ -233,6 +233,31 @@ class hexPosition (object):
             print(row_bottom)
             indent += 2
         print(" "*(indent-2) + headings)
+    
+    def translator (string):
+        #This function translates human terminal input into the proper array indices.
+        number_translated = 27
+        letter_translated = 27
+        names = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        if len(string) > 0:
+            letter = string[0]
+        if len(string) > 1:
+            number1 = string[1]
+        if len(string) > 2:
+            number2 = string[2]
+        for i in range(26):
+            if names[i] == letter:
+                letter_translated = i
+                break
+        if len(string) > 2:
+            for i in range(10,27):
+                if number1 + number2 == "{}".format(i):
+                    number_translated = i-1
+        else:
+            for i in range(1,10):
+                if number1 == "{}".format(i):
+                    number_translated = i-1
+        return (number_translated, letter_translated)
 
     # ==============================================================
     # 🤖  Match wrappers
@@ -265,6 +290,18 @@ class hexPosition (object):
             return self._human_vs_machine_cli(human_player, machine)
         else:
             return self._human_vs_machine_gui(human_player, machine)
+    
+    def human_vs_human(self):
+        """
+        Play a game against another human player.
+
+        • console run  → letter/number input (unchanged)  
+        • pygame run   → human clicks on the board
+        """
+        if not self._use_pygame:
+            return self._human_vs_human_cli()
+        else:
+            return self._human_vs_human_gui()
         
      # --------------------------------------------------------------
     # CLI implementation (unchanged from original behaviour)
@@ -295,30 +332,6 @@ class hexPosition (object):
             def machine (board, action_set):
                 from random import choice
                 return choice(action_set)
-        def translator (string):
-            #This function translates human terminal input into the proper array indices.
-            number_translated = 27
-            letter_translated = 27
-            names = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            if len(string) > 0:
-                letter = string[0]
-            if len(string) > 1:
-                number1 = string[1]
-            if len(string) > 2:
-                number2 = string[2]
-            for i in range(26):
-                if names[i] == letter:
-                    letter_translated = i
-                    break
-            if len(string) > 2:
-                for i in range(10,27):
-                    if number1 + number2 == "{}".format(i):
-                        number_translated = i-1
-            else:
-                for i in range(1,10):
-                    if number1 == "{}".format(i):
-                        number_translated = i-1
-            return (number_translated, letter_translated)
         #the match
         self.reset()
         while self.winner == 0 and not self._closing:
@@ -326,13 +339,30 @@ class hexPosition (object):
             possible_actions = self.get_action_space()
             if self.player == human_player:
                 while True:
-                    human_input = translator(input("Enter your move (e.g. 'A1'): "))
+                    human_input = self.translator(input("Enter your move (e.g. 'A1'): "))
                     if human_input in possible_actions:
                         break
                 self.move(human_input)
             else:
                 chosen = machine(self.board, possible_actions)
                 self.move(chosen)
+            if self.winner == 1:
+                self.print()
+                self._evaluate_white(verbose=True)
+            if self.winner == -1:
+                self.print()
+                self._evaluate_black(verbose=True)
+
+    def _human_vs_human_cli(self):
+        self.reset()
+        while self.winner == 0 and not self._closing:
+            self.print()
+            possible_actions = self.get_action_space()
+            while True:
+                human_input = self.translator(input("Enter your move (e.g. 'A1'): "))
+                if human_input in possible_actions:
+                    break
+            self.move(human_input)
             if self.winner == 1:
                 self.print()
                 self._evaluate_white(verbose=True)
@@ -354,8 +384,6 @@ class hexPosition (object):
             self._pygame_game_state.status_message = 'Auto-play - press ENTER to pause'  # type: ignore[attr-defined]
         self._pygame_game_state.auto_mode = auto  # type: ignore[attr-defined]
         self._pygame_game_state.auto_delay = 1 / rate if rate else 0.33  # type: ignore[attr-defined]
-
-
 
         while self.winner == 0 and not self._closing:
             # Wait for Enter key from GUI; tiny timeout keeps us responsive
@@ -392,7 +420,7 @@ class hexPosition (object):
 
         click_event = threading.Event()
         self._click_event = click_event
-        gs.step_event = click_event
+        gs.click_event = click_event
 
         while self.winner == 0 and not self._closing:
             if self.player == human_player:
@@ -408,6 +436,24 @@ class hexPosition (object):
                 self.move(chosen)
                 gs.status_message = 'Your turn - click a hex'
 
+        print('Red wins!' if self.winner == 1 else 'Blue wins!')
+
+    def _human_vs_human_gui(self):
+        self.reset()
+        gs = self._pygame_game_state
+        gs.status_message = 'Your turn - click a hex'
+
+        click_event = threading.Event()
+        self._click_event = click_event
+        gs.click_event = click_event
+
+        while self.winner == 0 and not self._closing:
+            click_event.wait()
+            while not self._closing and not click_event.wait(0.05):
+                pass
+            click_event.clear()
+            if self._closing:
+                break
         print('Red wins!' if self.winner == 1 else 'Blue wins!')
 
     # --------------------------------------------------------------
