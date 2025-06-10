@@ -141,6 +141,16 @@ def _interactive_wizard(args: argparse.Namespace) -> argparse.Namespace:
     else:
         args.human_player = None
 
+    if args.mode == "mvm":
+        ans = _prompt_yes_no(
+            "Enable auto-play mode (machine vs machine)?", default=True)
+        args.auto = ans
+        if ans:
+            rate_str = input("Auto-play speed in moves/second [3.0] ").strip()
+            args.rate = float(rate_str) if rate_str else 3.0
+        else:
+            args.rate = None
+
     if args.mode in ("hvm", "mvm") and args.agent is None:
         ans = input(
             "Built-in agent name or 'module:attr' [rule_based] "
@@ -180,7 +190,7 @@ def _run_game(args: argparse.Namespace) -> None:
             game.close()
     elif args.mode == "mvm":
         try:
-            game.machine_vs_machine(machine1=None, machine2=agent_callable)
+            game.machine_vs_machine(machine1=None, machine2=agent_callable, auto=args.auto, rate=args.rate)
         except KeyboardInterrupt:
             print("\nGame interrupted by user.")
         finally:
@@ -201,6 +211,14 @@ def main(argv: Optional[list[str]] = None) -> None:  # noqa: D401 - simple name
     )
 
     parser.add_argument("--mode", choices=["hvh", "hvm", "mvm"], help="Game mode: hvh (human vs human), hvm (human vs machine), mvm (machine vs machine)")
+    parser.add_argument(
+        "--auto", action="store_true",
+        help="Start machine-vs-machine in continuous auto-play."
+    )
+    parser.add_argument(
+        "--rate", type=float, default=3.0,
+        help="Auto-play speed in moves / second (default 3)."
+    )
     parser.add_argument("--board-size", type=int, help="Board side length (2-26, default 7)")
     parser.add_argument("--use-pygame", action="store_true", help="Enable pygame GUI")
     parser.add_argument("--agent", help="Built-in agent name *or* module:attr path (required for hvm/mvm unless interactive)")

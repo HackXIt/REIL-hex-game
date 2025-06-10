@@ -18,6 +18,8 @@ class GameState:
         self.step_event = None
         # graceful shutdown flag (gets filled by hex_engine)
         self.shutdown_event = None
+        self.auto_mode      = False  # bool – set by engine / Enter key
+        self.auto_delay     = 1/3    # seconds per move (default 3 Hz)
 
         self.hex_tile_size = 32
         self.board_width_tiles = 11

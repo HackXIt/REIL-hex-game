@@ -21,6 +21,7 @@ Agent = Callable[[List[List[int]], List[Coordinate]], Coordinate]
 
 import threading  # ← added, required only when use_pygame=True
 import atexit
+import time
 
 # ==============================================================
 # 🏗️  Game object
@@ -236,7 +237,7 @@ class hexPosition (object):
     # ==============================================================
     # 🤖  Match wrappers
     # ==============================================================
-    def machine_vs_machine(self, machine1: Agent | None = None, machine2: Agent | None = None):
+    def machine_vs_machine(self, machine1: Agent | None = None, machine2: Agent | None = None, *, auto: bool = False, rate: float = 3.0):
         """Computer-controlled duel.
 
         In GUI mode the *Enter* key inside the pygame window advances the game
@@ -249,9 +250,9 @@ class hexPosition (object):
             machine2 = lambda board, al: choice(al)
 
         if not self._use_pygame:
-            return self._machine_vs_machine_cli(machine1, machine2)
+            return self._machine_vs_machine_cli(machine1, machine2, auto=auto, rate=rate)
         else:
-            return self._machine_vs_machine_gui(machine1, machine2)
+            return self._machine_vs_machine_gui(machine1, machine2, auto=auto, rate=rate)
     
     def human_vs_machine(self, human_player: int = 1, machine: Agent | None = None):
         """
@@ -268,11 +269,14 @@ class hexPosition (object):
      # --------------------------------------------------------------
     # CLI implementation (unchanged from original behaviour)
     # --------------------------------------------------------------
-    def _machine_vs_machine_cli(self, machine1: Agent, machine2: Agent):
+    def _machine_vs_machine_cli(self, machine1: Agent, machine2: Agent, auto: bool, rate: float):
         self.reset()
         while self.winner == 0 and not self._closing:
             self.print()
-            input('Press ENTER to continue.')
+            if auto:
+                time.sleep(1/max(rate, 0.1))
+            else:
+                input('Press ENTER to continue.')
             chosen = machine1(self.board, self.get_action_space()) if self.player == 1 else machine2(self.board, self.get_action_space())
             self.move(chosen)
             if self.winner == 1:
@@ -339,20 +343,30 @@ class hexPosition (object):
     # --------------------------------------------------------------
     # GUI implementation with Enter-to-step
     # --------------------------------------------------------------
-    def _machine_vs_machine_gui(self, machine1: Agent, machine2: Agent):
+    def _machine_vs_machine_gui(self, machine1: Agent, machine2: Agent, auto: bool, rate: float):
         self.reset()
         # Step-event shared with pygame event loop
         step_event = threading.Event()
         self._pygame_game_state.step_event = step_event  # type: ignore[attr-defined]
-        self._pygame_game_state.status_message = 'Press SPACE to advance'  # type: ignore[attr-defined]
+        if not auto:
+            self._pygame_game_state.status_message = 'Press SPACE to advance'  # type: ignore[attr-defined]
+        else:
+            self._pygame_game_state.status_message = 'Auto-play - press ENTER to pause'  # type: ignore[attr-defined]
+        self._pygame_game_state.auto_mode = auto  # type: ignore[attr-defined]
+        self._pygame_game_state.auto_delay = 1 / rate if rate else 0.33  # type: ignore[attr-defined]
+
+
 
         while self.winner == 0 and not self._closing:
             # Wait for Enter key from GUI; tiny timeout keeps us responsive
-            while not step_event.wait(0.1) and not self._shutdown_event.is_set():
-                pass
-            if self._shutdown_event.is_set():
-                break
-            step_event.clear()
+            if self._pygame_game_state.auto_mode: # continuous mode
+                if self._closing:
+                    break
+                time.sleep(self._pygame_game_state.auto_delay)
+            else:                                        # step-mode
+                while not self._closing and not step_event.wait(0.1):
+                    pass
+                step_event.clear()
 
             chosen = machine1(self.board, self.get_action_space()) if self.player == 1 else machine2(self.board, self.get_action_space())
             self.move(chosen)

@@ -12,8 +12,18 @@ def on_quit(event, game: GameState):
 def on_key_down(event, game):
     if event.key == pygame.K_ESCAPE:
         on_quit(event, game)
-    if event.key == pygame.K_SPACE and getattr(game, "step_event", None):
+    if event.key == pygame.K_SPACE and getattr(game, "step_event", None) and not getattr(game, "auto_mode", False):
         game.step_event.set()
+    if event.key == pygame.K_RETURN:
+        if game.auto_mode:
+            game.auto_mode = False
+            game.status_message = "Press SPACE to advance"
+        else:
+            game.auto_mode = True
+            game.status_message = "Auto-play - press ENTER to pause"
+            # wake the engine so it doesn't wait for a SPACE that will never come
+            if getattr(game, "step_event", None):
+                game.step_event.set()
 
 
 def on_mouse_down(event, game):
