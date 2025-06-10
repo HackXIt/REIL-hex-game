@@ -1,24 +1,44 @@
-def main() -> None:
-    #make sure that the module is located somewhere where your Python system looks for packages
-    #note that python does not search directory trees, hence you must provide the mother-directory of the package
+"""reil_hex_game package
+=======================
+Entry-level imports and the *reil-hex-game* console-script entry point.
+"""
+from __future__ import annotations
 
-    #importing the module
-    from .hex_engine import hexPosition
+from importlib import import_module
+from types import ModuleType
+from typing import TYPE_CHECKING
 
-    #initializing a game object
-    game = hexPosition()
+from .hex_engine import hexPosition
 
-    #this is how your agent can be imported
-    #'submission' is the (sub)package that you provide
-    #please use a better name that identifies your group
-    from .submission.facade import agent
+__all__ = [
+    "hexPosition",
+    "hex_engine",
+    "main",
+]
 
-    #make sure that the agent you have provided is such that the following three
-    #method-calls are error-free and as expected
+# Re-export submodules lazily so ``import reil_hex_game.hex_engine`` still works
+import sys as _sys
 
-    #let your agent play against random
-    #game.human_vs_machine(human_player=1, machine=agent)
-    game.machine_vs_machine(machine1=None, machine2=agent)
+_hex_engine_module: ModuleType | None = None
 
-    #let your agent play against itself
-    #game.machine_vs_machine(machine1=agent, machine2=agent)
+def __getattr__(name: str):
+    if name == "hex_engine":
+        global _hex_engine_module
+        if _hex_engine_module is None:
+            _hex_engine_module = import_module(".hex_engine", __name__)
+        return _hex_engine_module
+    raise AttributeError(name)
+
+
+# ---------------------------------------------------------------------------
+# Console-script entry point
+# ---------------------------------------------------------------------------
+
+def main(argv: list[str] | None = None) -> None:
+    """Delegates to :pyfunc:`reil_hex_game.cli.main`."""
+    from .cli import main as cli_main
+    cli_main(argv)
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()
