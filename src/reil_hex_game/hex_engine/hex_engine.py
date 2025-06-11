@@ -99,7 +99,6 @@ class hexPosition (object):
     # ==============================================================
     # 🔌  PYGAME INTEGRATION
     # ==============================================================
-
     def _init_pygame_backend(self, size: int) -> None:
         """Starts the pygame render loop and prepares helper plumbing."""
         from importlib import import_module
