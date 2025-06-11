@@ -102,8 +102,7 @@ class hexPosition (object):
     def _init_pygame_backend(self, size: int) -> None:
         """Starts the pygame render loop and prepares helper plumbing."""
         from importlib import import_module
-        from .game_state import GameState   # local relative import
-        from .hex import game_loop          # same package
+        from .hex_pygame import GameState, game_loop   # local relative import
 
         # background thread that houses the GUI event loop
         self._pygame_game_state: GameState = GameState()

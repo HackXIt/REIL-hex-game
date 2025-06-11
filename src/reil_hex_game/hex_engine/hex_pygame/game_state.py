@@ -4,7 +4,7 @@
 # Modified by: HackXIt
 
 from . import hex_geometry 
-from .hex_engine import hexPosition
+from ..hex_engine import hexPosition
 
 class GameState:
 
