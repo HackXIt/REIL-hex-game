@@ -17,7 +17,7 @@ import argparse
 import importlib
 import sys
 from types import ModuleType
-from typing import Callable, Optional, Sequence
+from typing import Callable, Optional, Sequence, Union, List
 
 from .hex_engine import hexPosition
 
@@ -161,6 +161,29 @@ def _interactive_wizard(args: argparse.Namespace) -> argparse.Namespace:
     return args
 
 # ---------------------------------------------------------------------------
+# Helpers for multiple‑agent handling
+# ---------------------------------------------------------------------------
+
+def _normalise_agent_list(agent_opt: Union[None, str, List[str]]) -> List[str]:
+    """Return a list with exactly two entries (duplicates if necessary)."""
+    if agent_opt is None:
+        return ["rule_based", "rule_based"]
+
+    if isinstance(agent_opt, str):
+        return [agent_opt, agent_opt]
+
+    if isinstance(agent_opt, list):
+        if len(agent_opt) == 0:
+            return ["rule_based", "rule_based"]
+        if len(agent_opt) == 1:
+            return [agent_opt[0], agent_opt[0]]
+        if len(agent_opt) == 2:
+            return agent_opt  # type: ignore[return-value]
+        raise ValueError("--agent accepts at most two values.")
+
+    raise TypeError("Invalid --agent argument type.")
+
+# ---------------------------------------------------------------------------
 # Game runner
 # ---------------------------------------------------------------------------
 
@@ -170,27 +193,36 @@ def _run_game(args: argparse.Namespace) -> None:
         use_pygame=args.use_pygame,
     )
 
-    agent_callable: Optional[AgentCallable] = None
-    if args.mode in ("hvm", "mvm"):
-        agent_callable = _resolve_agent(args.agent)
+    # Normalise agent option into a two‑element list
+    agent_names = _normalise_agent_list(args.agent)
 
     if args.mode == "hvh":
         try:
-            game.human_vs_human()  # type: ignore[attr-defined]
+            game.human_vs_human()  # type: ignore[attr‑defined]
         except AttributeError:
             raise SystemExit(
                 "hexPosition currently lacks 'human_vs_human' support.")
+
     elif args.mode == "hvm":
+        # Use only the *first* agent when two are supplied
+        agent_callable = _resolve_agent(agent_names[0])
         human_player_flag = 1 if (args.human_player or 1) == 1 else -1
         try:
-            game.human_vs_machine(human_player=human_player_flag, machine=agent_callable)
+            game.human_vs_machine(human_player=human_player_flag,
+                                   machine=agent_callable)
         except KeyboardInterrupt:
             print("\nGame interrupted by user.")
         finally:
             game.close()
+
     elif args.mode == "mvm":
+        agent1_callable = _resolve_agent(agent_names[0])
+        agent2_callable = _resolve_agent(agent_names[1])
         try:
-            game.machine_vs_machine(machine1=None, machine2=agent_callable, auto=args.auto, rate=args.rate)
+            game.machine_vs_machine(machine1=agent1_callable,
+                                     machine2=agent2_callable,
+                                     auto=args.auto,
+                                     rate=args.rate)
         except KeyboardInterrupt:
             print("\nGame interrupted by user.")
         finally:
@@ -210,7 +242,8 @@ def main(argv: Optional[list[str]] = None) -> None:  # noqa: D401 - simple name
         description="Play the Hex board game from the command line.",
     )
 
-    parser.add_argument("--mode", choices=["hvh", "hvm", "mvm"], help="Game mode: hvh (human vs human), hvm (human vs machine), mvm (machine vs machine)")
+    parser.add_argument("--mode", choices=["hvh", "hvm", "mvm"],
+                        help="Game mode: hvh (human vs human), hvm (human vs machine), mvm (machine vs machine)")
     parser.add_argument(
         "--auto", action="store_true",
         help="Start machine-vs-machine in continuous auto-play."
@@ -219,11 +252,22 @@ def main(argv: Optional[list[str]] = None) -> None:  # noqa: D401 - simple name
         "--rate", type=float, default=3.0,
         help="Auto-play speed in moves / second (default 3)."
     )
-    parser.add_argument("--board-size", type=int, help="Board side length (2-26, default 7)")
-    parser.add_argument("--use-pygame", action="store_true", help="Enable pygame GUI")
-    parser.add_argument("--agent", help="Built-in agent name *or* module:attr path (required for hvm/mvm unless interactive)")
-    parser.add_argument("--human-player", type=int, choices=[1, 2], help="For hvm mode: 1=white, 2=black (default 1)")
-    parser.add_argument("-i", "--interactive", action="store_true", help="Prompt for options interactively (default when no flags are given)")
+    parser.add_argument("--board-size", type=int,
+                        help="Board side length (2-26, default 7)")
+    parser.add_argument("--use-pygame", action="store_true",
+                        help="Enable pygame GUI")
+    parser.add_argument(
+        "--agent", nargs="+",
+        help=(
+            "Built-in agent name or module:attr path. "
+            "Accepts one or two values - when two are given they are used as "
+            "agent 1 and agent 2. In hvm mode the second value is ignored."
+        )
+    )
+    parser.add_argument("--human-player", type=int, choices=[1, 2],
+                        help="For hvm mode: 1=white, 2=black (default 1)")
+    parser.add_argument("-i", "--interactive", action="store_true",
+                        help="Prompt for options interactively (default when no flags are given)")
 
     args = parser.parse_args(argv)
 
