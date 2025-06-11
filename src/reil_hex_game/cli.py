@@ -53,6 +53,14 @@ def _resolve_agent(agent: str) -> AgentCallable:
     * Otherwise, it is interpreted as the *name* of a built-in agent residing
       below :pymod:`reil_hex_game.agents`.
     """
+    # ------------------------------------------------------------------
+    # Special-case built-in random agent
+    # ------------------------------------------------------------------
+    if agent.lower() in {"random", "rnd"}:
+        from random import choice
+        return lambda _board, action_set: choice(action_set)
+    # ------------------------------------------------------------------
+
     # Path-like: explicit attr specification
     if ":" in agent or "." in agent:
         try:
