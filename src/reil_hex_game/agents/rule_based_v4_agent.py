@@ -24,18 +24,7 @@ STRATEGY_FUNCTIONS_ADAPTED = BASE_STRATEGIES.copy()
 # STRATEGY_FUNCTIONS_ADAPTED["take_center"] = take_center
 
 # Global dictionary to count how often each strategy was chosen
-STRATEGY_USE_COUNT = {
-    "take_center": 0,
-    "extend_own_chain": 0,
-    "break_opponent_bridge": 0,
-    "protect_own_chain_from_cut": 0,
-    "create_double_threat": 0,
-    "shortest_connection_path": 0,
-    "favor_bridges": 0,
-    "mild_block_threat": 0,
-    "advance_toward_goal": 0,
-    "block_aligned_opponent_path": 0
-}
+STRATEGY_USE_COUNT = {name: 0 for name in STRATEGY_FUNCTIONS_ADAPTED}
 
 EVAL_CACHE = {}
 LAST_PLAYER = None
@@ -44,100 +33,102 @@ LAST_PLAYER = None
 # Otherwise the agent resolver will not find it.
 # When using an agent like 'uv run reil-hex-game --agent rule_based_v4' the 'agent' at the can be omitted
 def rule_based_v4_agent(board, action_set):
-    global LAST_PLAYER # <- actually update the module-level var
-    size = len(board)
-    player = infer_player(board)
-    opponent = -player
-    LAST_PLAYER = player  # Update the last player for potential future use
+    # global is necessary to ACTUALLY mutate the global variables
+    global LAST_PLAYER, STRATEGY_USE_COUNT
 
-    stones = sum(1 for row in board for cell in row if cell != 0)
-    total_cells = size * size
-    early_game = stones < 0.3 * total_cells
-    late_game = stones > 0.7 * total_cells
+    size          = len(board)
+    player        = infer_player(board)
+    opponent      = -player
+    LAST_PLAYER   = player
 
-    # Check for immediate winning move
+    # ------------------------------------------------------------------ #
+    # 0️⃣  Early tactical checks (immediate win / block / forcing win)
+    # ------------------------------------------------------------------ #
     for move in action_set:
-        if is_winning_move(board, move, player, EVAL_CACHE=EVAL_CACHE):
+        if is_winning_move(board, move, player,  EVAL_CACHE):
             print(f"Immediate winning move found: {move}")
             return move
-    
-    for move in action_set:
-            if is_winning_move(board, move, opponent, EVAL_CACHE=EVAL_CACHE):
-                print(f"🛡️ Blocking opponent's immediate win: {move}")
-                return move
+        if is_winning_move(board, move, opponent, EVAL_CACHE):
+            print(f"🛡️  Blocking opponent's immediate win: {move}")
+            return move
 
-    # Check for 2-step forcing win
     for move in action_set:
-        if is_forcing_win(board, move, player, EVAL_CACHE=EVAL_CACHE):
+        if is_forcing_win(board, move, player, EVAL_CACHE):
             print(f"Forcing 2-step win move found: {move}")
             return move
 
-    strategy_functions = STRATEGY_FUNCTIONS_ADAPTED
+    # ------------------------------------------------------------------ #
+    # 1️⃣  Stage-dependent weight tweaks
+    # ------------------------------------------------------------------ #
+    stones       = sum(1 for row in board for cell in row if cell != 0)
+    total_cells  = size * size
+    early_game   = stones < 0.30 * total_cells
+    late_game    = stones > 0.70 * total_cells
 
-    move_scores = {
-        "take_center": {},
-        "extend_own_chain": {},
-        "break_opponent_bridge": {},
-        "protect_own_chain_from_cut": {},
-        "create_double_threat": {},
-        "shortest_connection_path": {},
-        "favor_bridges": {},
-        "mild_block_threat": {},
-        "advance_toward_goal": {},
-        "block_aligned_opponent_path":{}
-    }
     STRATEGY_WEIGHTS = {
-        "take_center": 5,
-        "extend_own_chain": 8,
-        "break_opponent_bridge": 7,
-        "protect_own_chain_from_cut": 6,
-        "create_double_threat": 10,
-        "shortest_connection_path": 12,
-        "favor_bridges": 2,
-        "mild_block_threat": 2,
-        "advance_toward_goal": 4,
-        "block_aligned_opponent_path": 2
+        "take_center"                : 5,
+        "extend_own_chain"           : 8,
+        "break_opponent_bridge"      : 7,
+        "protect_own_chain_from_cut" : 6,
+        "create_double_threat"       :10,
+        "shortest_connection_path"   :12,
+        "favor_bridges"              : 2,
+        "mild_block_threat"          : 2,
+        "advance_toward_goal"        : 4,
+        "block_aligned_opponent_path": 2,
     }
-
     if early_game:
-        STRATEGY_WEIGHTS["take_center"] += 3
-        STRATEGY_WEIGHTS["extend_own_chain"] += 2
+        STRATEGY_WEIGHTS["take_center"]              += 3
+        STRATEGY_WEIGHTS["extend_own_chain"]         += 2
         STRATEGY_WEIGHTS["shortest_connection_path"] += 2
     if late_game:
-        STRATEGY_WEIGHTS["create_double_threat"] += 3
+        STRATEGY_WEIGHTS["create_double_threat"]     += 3
         STRATEGY_WEIGHTS["protect_own_chain_from_cut"] += 2
         STRATEGY_WEIGHTS["shortest_connection_path"] += 3
 
-    for move in action_set:
-        for tactic in strategy_functions:
-            move_scores[tactic][move] = 0
-            suggested = STRATEGY_FUNCTIONS_ADAPTED[tactic](board, [move], player)
-            if suggested == move:
-                move_scores[tactic][move] += STRATEGY_WEIGHTS[tactic]
+    # ------------------------------------------------------------------ #
+    # 2️⃣  Ask **each** strategy once for its favourite move
+    # ------------------------------------------------------------------ #
+    suggestions = {
+        name: func(board, action_set, player)
+        for name, func in STRATEGY_FUNCTIONS_ADAPTED.items()
+    }
 
-    # Aggregate total scores for each move across all strategies
+    # ------------------------------------------------------------------ #
+    # 3️⃣  Aggregate weighted votes -> total_move_scores
+    # ------------------------------------------------------------------ #
     total_move_scores = {}
-    for tactic_scores in move_scores.values():
-        for move, score in tactic_scores.items():
-            total_move_scores[move] = total_move_scores.get(move, 0) + score
+    for name, move in suggestions.items():
+        if move is None:
+            continue
+        weight = STRATEGY_WEIGHTS[name]
+        total_move_scores[move] = total_move_scores.get(move, 0) + weight
 
+    # Debug print — show scores that are >0
     print("\n(Suggested moves) : total score for the move collected over all strategies:")
-    for move, score in sorted(total_move_scores.items(), key=lambda x: -x[1]):
-        if score > 0:
-            print(f"  {move}: {score}")
+    for mv, sc in sorted(total_move_scores.items(), key=lambda x: -x[1]):
+        if sc > 0:
+            print(f"  {mv}: {sc}")
 
-    if move_scores:
+    # ------------------------------------------------------------------ #
+    # 4️⃣  Choose a move (fallback to random if no strategy suggested a move)
+    # ------------------------------------------------------------------ #
+    if not total_move_scores:                      # every strategy passed
+        chosen_move = fallback_random(action_set)
+        max_score   = 0
+    else:
         max_score = max(total_move_scores.values())
-        best_candidates = [m for m, score in total_move_scores.items() if score == max_score]
-        chosen_move = random.choice(best_candidates)
+        best_moves = [m for m, s in total_move_scores.items() if s == max_score]
+        chosen_move = random.choice(best_moves)
 
-        # Log which strategies recommended the chosen move
-        print(f"\nChosen move: {chosen_move} with score {max_score}")
-        print("Strategies that suggested this move:")
-        for tactic in STRATEGY_USE_COUNT:
-            if move_scores[tactic].get(chosen_move, 0) > 0:
-                STRATEGY_USE_COUNT[tactic] += 1
-                print(f"  {tactic}: {move_scores[tactic].get(chosen_move, 0)}")
+    # ------------------------------------------------------------------ #
+    # 5️⃣  Update per-strategy usage count, list contributors
+    # ------------------------------------------------------------------ #
+    print(f"\nChosen move: {chosen_move} with score {max_score}")
+    print("Strategies that suggested this move:")
+    for name, move in suggestions.items():
+        if move == chosen_move:
+            STRATEGY_USE_COUNT[name] += 1
+            print(f"  {name}: +{STRATEGY_WEIGHTS[name]}")
 
-        return chosen_move
-    return fallback_random(action_set)
+    return chosen_move

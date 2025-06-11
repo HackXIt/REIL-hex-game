@@ -2,73 +2,14 @@ import random
 import heapq
 from ..hex_engine.hex_engine import hexPosition
 from copy import deepcopy
-
-# -------------------------------------------------------------------------------
-# strategy functions (definitions) …
-# -------------------------------------------------------------------------------
-
-# put every strategy function here first
-def take_center(board, move, player):
-    ...
-def extend_own_chain(board, move, player):
-    ...
-def block_aligned_opponent_path(board, move, player):
-    ...
-def break_opponent_bridge(board, move, player):
-    ...
-def protect_own_chain_from_cut(board, move, player):
-    ...
-def create_double_threat(board, move, player):
-    ...
-def shortest_connection_path(board, move, player):
-    ...
-def favor_bridges(board, move, player):
-    ...
-def mild_block_threat(board, move, player):
-    ...
-def advance_toward_goal(board, move, player):
-    ...
-
+from typing import List, Tuple, Dict, Callable
 
 # -------------------------------------------------------------------------------
 # CONSTANTS
 # -------------------------------------------------------------------------------
-
+Coordinate = Tuple[int, int]
 # Neighboring directions on a hex grid (pointy-top orientation)
 HEX_NEIGHBORS = [(-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0)]
-
-def _get_strategies():
-    """
-    Returns a dictionary mapping strategy names to their corresponding strategy functions.
-
-    Each key in the returned dictionary is a string representing the name of a strategy,
-    and each value is a function implementing that strategy. These strategies are used
-    by rule-based agents to determine moves in the Hex game.
-
-    Returns:
-        dict: A dictionary where keys are strategy names (str) and values are strategy functions (callable).
-    """
-    strategy_functions = {
-        "take_center": take_center,
-        "extend_own_chain": extend_own_chain,
-        "break_opponent_bridge": break_opponent_bridge,
-        "protect_own_chain_from_cut": protect_own_chain_from_cut,
-        "create_double_threat": create_double_threat,
-        "shortest_connection_path": shortest_connection_path,
-        "favor_bridges": favor_bridges,
-        "mild_block_threat": mild_block_threat,
-        "advance_toward_goal": advance_toward_goal,
-        "block_aligned_opponent_path": block_aligned_opponent_path
-    }
-    return strategy_functions
-
-STRATEGY_FUNCTIONS = _get_strategies()
-STRATEGIES = STRATEGY_FUNCTIONS.keys()
-
-__all__ = [                                             # everything outsiders may import
-    "HEX_NEIGHBORS", "STRATEGY_FUNCTIONS", "STRATEGIES",
-    "is_winning_move", "is_forcing_win", "infer_player", "fallback_random",
-]
 
 # -------------------------------------------------------------------------------
 # GENERAL HELPER FUNCTIONS FOR RULE BASED AGENT
@@ -184,21 +125,6 @@ def infer_player(board):
     flat = [c for row in board for c in row]
     return 1 if flat.count(1) <= flat.count(-1) else -1
 
-def print_strategy_summary(strategy_use_count):
-    """
-    Prints a summary of how many times each strategy was used during the game.
-
-    Args:
-        strategy_use_count (dict): A dictionary mapping strategy names (str) to the number of times (int) each strategy was used.
-
-    Returns:
-        None
-    """
-    """Display strategy usage summary at the end of the game."""
-    print("\n Strategy usage summary:")
-    for strategy, count in strategy_use_count.items():
-        print(f"  {strategy}: {count} times")
-
 def announce_agent_color(board):
     """
     Announces the color (White or Black) that the agent is currently playing as, 
@@ -215,6 +141,10 @@ def announce_agent_color(board):
     player = infer_player(board)
     color = "White (○)" if player == 1 else "Black (●)"
     print(f"\n Your agent is playing as: {color}")
+
+# -------------------------------------------------------------------------------
+# STRATEGY HELPER FUNCTIONS
+# -------------------------------------------------------------------------------
 
 def get_neighbors(i, j, size):
     """
@@ -277,7 +207,7 @@ def dijkstra(board, player, start_edges, target_edges):
         visited.add((i, j))
         if (i, j) in target_edges:
             return (i, j)
-        for ni, nj in neighbors((i, j)):
+        for ni, nj in get_neighbors(i, j, len(board)):
             if (ni, nj) not in visited:
                 cost = 0 if board[ni][nj] == player else 1
                 heapq.heappush(heap, (dist + cost, (ni, nj)))
@@ -370,9 +300,9 @@ def extend_own_chain(board, action_set, player):
         tuple[int, int] or None: The selected action (row, column) to extend the player's chain, or None if no such move is found.
     """
     size = len(board)
-    my_positions = [(i, j) for i in range(size) for j in range(size) if board[i][j] == player]
-    random.shuffle(my_positions)
-    for i, j in my_positions:
+    stones = [(i, j) for i in range(size) for j in range(size) if board[i][j] == player]
+    random.shuffle(stones)
+    for i, j in stones:
         for ni, nj in get_neighbors(i, j, size):
             if (ni, nj) in action_set:
                 return (ni, nj)
@@ -428,14 +358,12 @@ def protect_own_chain_from_cut(board, action_set, player):
     Returns:
         tuple[int, int] or None: The (row, column) action that protects the player's chain, or None if no such action exists.
     """
-    size = len(board)
     for i, j in action_set:
         board[i][j] = player
-        if is_cut_point(board, player):
-            board[i][j] = 0
-            continue
+        cut = is_cut_point(board, player)
         board[i][j] = 0
-        return (i, j)
+        if not cut:
+            return (i, j)
     return None
 
 def create_double_threat(board, action_set, player):
@@ -507,10 +435,10 @@ def shortest_connection_path(board, action_set, player):
         starts = [(0, j) for j in range(size)]
         goals = [(size - 1, j) for j in range(size)]
 
-    best_move = dijkstra(board, player, starts, goals)
+    best_move = dijkstra(board, player, starts, set(goals))
     return best_move if best_move in action_set else None
 
-def favor_bridges(board, moves, player):
+def favor_bridges(board, action_set, player):
     """
     Selects a move that favors forming "bridges" between the player's existing stones on a Hex board.
     A "bridge" is a potential connection between two stones that are two or three steps apart, 
@@ -519,18 +447,17 @@ def favor_bridges(board, moves, player):
     vertical for White (player 1) and horizontal for Black (player -1).
     Args:
         board (list[list[int]]): The current Hex board as a 2D list, where each cell is 0 (empty), 1 (White), or -1 (Black).
-        moves (list[tuple[int, int]]): A list of available moves, each as a (row, col) tuple.
+        action_set (list[tuple[int, int]]): A list of available moves, each as a (row, col) tuple.
         player (int): The current player (1 for White, -1 for Black).
     Returns:
         tuple[int, int] or None: The selected move that favors bridge formation, or None if no such move is found.
     """
     size = len(board)
-    own_stones = [(i, j) for i in range(size) for j in range(size) if board[i][j] == player]
-    best_move = None
+    stones = [(i, j) for i in range(size) for j in range(size) if board[i][j] == player]
 
-    for move in moves:
+    for move in action_set:
         mx, my = move
-        for (sx, sy) in own_stones:
+        for (sx, sy) in stones:
             dx = mx - sx
             dy = my - sy
             distance = abs(dx) + abs(dy)
@@ -538,17 +465,15 @@ def favor_bridges(board, moves, player):
                 # Respect connection direction: vertical for White (player 1), horizontal for Black (player -1)
                 if (player == 1 and abs(dx) > abs(dy)) or (player == -1 and abs(dy) > abs(dx)):
                     return move
-                if best_move is None:
-                    best_move = move
-    return best_move
+    return None
 
-def mild_block_threat(board, moves, player):
+def mild_block_threat(board, action_set, player):
     """
     Attempts to block mild threats from the opponent by simulating each possible move and checking for potential opponent threats.
 
     Args:
         board (list[list[int]]): The current game board represented as a 2D list, where 0 indicates an empty cell, and positive/negative values represent players.
-        moves (list[tuple[int, int]]): A list of possible moves, each represented as a tuple of (row, column) indices.
+        action_set (list[tuple[int, int]]): A list of possible moves, each represented as a tuple of (row, column) indices.
         player (int): The current player's identifier (typically 1 or -1).
 
     Returns:
@@ -559,7 +484,7 @@ def mild_block_threat(board, moves, player):
     """
     opponent = -player
     size = len(board)
-    for move in moves:
+    for move in action_set:
         new_board = deepcopy(board)
         new_board[move[0]][move[1]] = player
         opponent_threats = [
@@ -573,14 +498,14 @@ def mild_block_threat(board, moves, player):
             return move
     return None
 
-def advance_toward_goal(board, moves, player):
+def advance_toward_goal(board, action_set, player):
     """
     Selects the move that advances the player's position toward their goal edge in a Hex game.
     For player 1 (White), who aims to connect top to bottom, the function favors moves that increase the average row index.
     For player 2 (Black), who aims to connect left to right, it favors moves that increase the average column index.
     Args:
         board (list[list[int]]): The current Hex board as a 2D list, where each cell is 0 (empty), 1 (White), or 2 (Black).
-        moves (list[tuple[int, int]]): A list of available moves, each as a (row, column) tuple.
+        action_set (list[tuple[int, int]]): A list of available moves, each as a (row, column) tuple.
         player (int): The player number (1 for White, 2 for Black).
     Returns:
         tuple[int, int] or None: The move (row, column) that best advances toward the goal, or None if the player has no stones on the board.
@@ -593,13 +518,13 @@ def advance_toward_goal(board, moves, player):
     if player == 1:
         # White goes top to bottom -> favor increasing row (i)
         avg = sum(i for i, _ in own_stones) / len(own_stones)
-        return max(moves, key=lambda m: m[0] - avg)
+        return max(action_set, key=lambda m: m[0] - avg)
     else:
         # Black goes left to right -> favor increasing column (j)
         avg = sum(j for _, j in own_stones) / len(own_stones)
-        return max(moves, key=lambda m: m[1] - avg)
+        return max(action_set, key=lambda m: m[1] - avg)
 
-def block_aligned_opponent_path(board, moves, player):
+def block_aligned_opponent_path(board, action_set, player):
     """
     Selects a move that blocks the opponent's most aligned path towards victory in Hex.
     This function analyzes the current board state to identify the axis (row or column)
@@ -608,7 +533,7 @@ def block_aligned_opponent_path(board, moves, player):
     along that axis, if possible.
     Args:
         board (list[list[int]]): The current Hex board as a 2D list, where each cell is 0 (empty), 1 (player 1), or -1 (player -1).
-        moves (list[tuple[int, int]]): A list of available moves, each represented as a tuple (row, col).
+        action_set (list[tuple[int, int]]): A list of available moves, each represented as a tuple (row, col).
         player (int): The current player (1 or -1).
     Returns:
         tuple[int, int] or None: A move (row, col) that blocks the opponent's most aligned path,
@@ -633,7 +558,62 @@ def block_aligned_opponent_path(board, moves, player):
         return None
 
     target = max(aligned, key=aligned.get)
-    for move in moves:
+    for move in action_set:
         if (opponent == -1 and move[1] == target) or (opponent == 1 and move[0] == target):
             return move
     return None
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Strategy registry – build AFTER all defs            ⬇️⬇️⬇️
+# ══════════════════════════════════════════════════════════════════════════════
+STRATEGY_FUNCTIONS: Dict[str, Callable] = {
+    "take_center"                : take_center,
+    "extend_own_chain"           : extend_own_chain,
+    "break_opponent_bridge"      : break_opponent_bridge,
+    "protect_own_chain_from_cut" : protect_own_chain_from_cut,
+    "create_double_threat"       : create_double_threat,
+    "shortest_connection_path"   : shortest_connection_path,
+    "favor_bridges"              : favor_bridges,
+    "mild_block_threat"          : mild_block_threat,
+    "advance_toward_goal"        : advance_toward_goal,
+    "block_aligned_opponent_path": block_aligned_opponent_path,
+}
+STRATEGIES = tuple(STRATEGY_FUNCTIONS)
+
+# ---------------------------------------------------------------------------
+# 🖨️  Cross-platform auto-print of STRATEGY_USE_COUNT at program exit
+# (silent on miss)
+# ---------------------------------------------------------------------------
+def print_strategy_summary(counts: Dict[str, int]):
+    """
+    Prints a summary of how many times each strategy was used during the game.
+
+    Args:
+        counts (dict): A dictionary mapping strategy names (str) to the number of times (int) each strategy was used.
+
+    Returns:
+        None
+    """
+    print("\n Strategy usage summary:")
+    for k in STRATEGIES:
+        print(f"  {k}: {counts.get(k,0)} times")
+
+def _locate_strategy_use_count():
+    for frame in inspect.stack():
+        if "STRATEGY_USE_COUNT" in frame.frame.f_globals:
+            return frame.frame.f_globals["STRATEGY_USE_COUNT"]
+    for mod in sys.modules.values():
+        if hasattr(mod, "STRATEGY_USE_COUNT"):
+            return getattr(mod, "STRATEGY_USE_COUNT")
+    return None
+
+def _summary_atexit():
+    counts = _locate_strategy_use_count()
+    if counts: print_strategy_summary(counts)
+
+atexit.register(_summary_atexit)
+
+__all__ = [
+    "HEX_NEIGHBORS", "STRATEGY_FUNCTIONS", "STRATEGIES",
+    "is_winning_move", "is_forcing_win", "infer_player", "fallback_random",
+]
