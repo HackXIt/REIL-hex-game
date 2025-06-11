@@ -1,3 +1,5 @@
+# TODO Please change and adapt this code structure according to rule_based_agent_4.py
+
 import random
 
 # Neighboring directions on a hex grid (pointy-top orientation)
@@ -176,4 +178,3 @@ def print_strategy_summary():
     print("\n Strategy usage summary:")
     for strategy, count in STRATEGY_USE_COUNT.items():
         print(f"  {strategy}: {count} times")
-

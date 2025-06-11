@@ -1,3 +1,5 @@
+# TODO Please change and adapt this code structure according to rule_based_agent_4.py
+
 import random
 
 # Neighboring directions on a hex grid (pointy-top orientation)

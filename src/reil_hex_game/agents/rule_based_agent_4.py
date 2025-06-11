@@ -2,12 +2,18 @@ import random
 import heapq
 from ..hex_engine.hex_engine import hexPosition
 from copy import deepcopy
-from .rule_based_helper import STRATEGY_FUNCTIONS, is_winning_move, is_forcing_win, infer_player
+from .rule_based_helper import STRATEGY_FUNCTIONS, HEX_NEIGHBORS, is_winning_move, is_forcing_win, infer_player, fallback_random
 
 STRATEGY_FUNCTIONS_ADAPTED = STRATEGY_FUNCTIONS.copy()
+# NOTE EXAMPLE of adapting a singular strategy for a specific agent at the end of this file.
+# def take_center(board, action_set, player):
+#     print("Doing something special or different for take_center strategy in rule_based_agent_4")
+#     size = len(board)
+#     center = (size // 2, size // 2)
+#     return center if center in action_set else None
 
-# Neighboring directions on a hex grid (pointy-top orientation)
-HEX_NEIGHBORS = [(-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0)]
+# Swap of the function in the global strategy functions dictionary
+# STRATEGY_FUNCTIONS_ADAPTED["take_center"] = take_center
 
 # Global dictionary to count how often each strategy was chosen
 STRATEGY_USE_COUNT = {
@@ -36,7 +42,6 @@ def rule_based_agent_4(board, action_set):
     total_cells = size * size
     early_game = stones < 0.3 * total_cells
     late_game = stones > 0.7 * total_cells
-
 
     # Check for immediate winning move
     for move in action_set:
@@ -124,13 +129,3 @@ def rule_based_agent_4(board, action_set):
 
         return chosen_move
     return fallback_random(action_set)
-
-def fallback_random(action_set):
-    return random.choice(action_set)
-
-# def take_center(board, action_set, player):
-#     size = len(board)
-#     center = (size // 2, size // 2)
-#     return center if center in action_set else None
-
-# STRATEGY_FUNCTIONS_ADAPTED["take_center"] = take_center

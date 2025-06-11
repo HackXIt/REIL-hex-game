@@ -1,3 +1,5 @@
+# TODO Please change and adapt this code structure according to rule_based_agent_4.py
+
 import random
 import heapq
 from ..hex_engine.hex_engine import hexPosition
@@ -501,4 +503,3 @@ def announce_agent_color(board):
     player = infer_player(board)
     color = "White (○)" if player == 1 else "Black (●)"
     print(f"\n Your agent is playing as: {color}")
-
