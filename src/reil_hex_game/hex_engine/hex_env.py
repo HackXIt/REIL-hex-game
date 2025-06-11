@@ -1,5 +1,6 @@
 import gymnasium as gym
 from reil_hex_game.hex_engine.hex_engine import hexPosition
+import numpy as np
 
 class HexEnv(gym.Env):
     def __init__(self, size=7):
