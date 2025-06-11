@@ -3,7 +3,7 @@ import random
 # Neighboring directions on a hex grid (pointy-top orientation)
 HEX_NEIGHBORS = [(-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0)]
 
-def rule_based_agent_1(board, action_set):
+def rule_based_agent(board, action_set):
     size = len(board)
     player = infer_player(board)
 
@@ -122,4 +122,3 @@ def create_double_threat(board, action_set, player):
 
 def fallback_random(action_set):
     return random.choice(action_set)
-
