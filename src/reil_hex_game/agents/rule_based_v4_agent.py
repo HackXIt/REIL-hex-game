@@ -2,17 +2,25 @@ import random
 import heapq
 from ..hex_engine.hex_engine import hexPosition
 from copy import deepcopy
-from .rule_based_helper import STRATEGY_FUNCTIONS, HEX_NEIGHBORS, is_winning_move, is_forcing_win, infer_player, fallback_random
+from .rule_based_helper import (
+    STRATEGY_FUNCTIONS as BASE_STRATEGIES,  # ← just an alias
+    HEX_NEIGHBORS, is_winning_move, is_forcing_win,
+    infer_player, fallback_random,
+)
 
-STRATEGY_FUNCTIONS_ADAPTED = STRATEGY_FUNCTIONS.copy()
+# Work on a *copy* so other agents are unaffected
+STRATEGY_FUNCTIONS_ADAPTED = BASE_STRATEGIES.copy()
 # NOTE EXAMPLE of adapting a singular strategy for a specific agent at the end of this file.
-# def take_center(board, action_set, player):
-#     print("Doing something special or different for take_center strategy in rule_based_agent_4")
-#     size = len(board)
-#     center = (size // 2, size // 2)
-#     return center if center in action_set else None
 
-# Swap of the function in the global strategy functions dictionary
+# def take_center(board, action_set, player):
+#     """Rule-4: only grab the centre in the very first two plies."""
+#     if sum(cell != 0 for row in board for cell in row) < 2:
+#         size   = len(board)
+#         centre = (size // 2, size // 2)
+#         return centre if centre in action_set else None
+#     return None
+
+# # **override just this one entry**
 # STRATEGY_FUNCTIONS_ADAPTED["take_center"] = take_center
 
 # Global dictionary to count how often each strategy was chosen
@@ -32,11 +40,15 @@ STRATEGY_USE_COUNT = {
 EVAL_CACHE = {}
 LAST_PLAYER = None
 
-def rule_based_agent_4(board, action_set):
+# NOTE THE NAME of the agent function MUST match the filename!
+# Otherwise the agent resolver will not find it.
+# When using an agent like 'uv run reil-hex-game --agent rule_based_v4' the 'agent' at the can be omitted
+def rule_based_v4_agent(board, action_set):
+    global LAST_PLAYER # <- actually update the module-level var
     size = len(board)
     player = infer_player(board)
     opponent = -player
-    LAST_PLAYER = player
+    LAST_PLAYER = player  # Update the last player for potential future use
 
     stones = sum(1 for row in board for cell in row if cell != 0)
     total_cells = size * size

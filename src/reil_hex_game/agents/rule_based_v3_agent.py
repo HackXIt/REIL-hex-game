@@ -27,7 +27,7 @@ STRATEGY_USE_COUNT = {
 EVAL_CACHE = {}
 LAST_PLAYER = None
 
-def rule_based_agent_3(board, action_set):
+def rule_based_v3_agent(board, action_set):
     size = len(board)
     player = infer_player(board)
     opponent = -player

@@ -4,13 +4,40 @@ from ..hex_engine.hex_engine import hexPosition
 from copy import deepcopy
 
 # -------------------------------------------------------------------------------
+# strategy functions (definitions) …
+# -------------------------------------------------------------------------------
+
+# put every strategy function here first
+def take_center(board, move, player):
+    ...
+def extend_own_chain(board, move, player):
+    ...
+def block_aligned_opponent_path(board, move, player):
+    ...
+def break_opponent_bridge(board, move, player):
+    ...
+def protect_own_chain_from_cut(board, move, player):
+    ...
+def create_double_threat(board, move, player):
+    ...
+def shortest_connection_path(board, move, player):
+    ...
+def favor_bridges(board, move, player):
+    ...
+def mild_block_threat(board, move, player):
+    ...
+def advance_toward_goal(board, move, player):
+    ...
+
+
+# -------------------------------------------------------------------------------
 # CONSTANTS
 # -------------------------------------------------------------------------------
 
 # Neighboring directions on a hex grid (pointy-top orientation)
 HEX_NEIGHBORS = [(-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0)]
 
-def get_strategies():
+def _get_strategies():
     """
     Returns a dictionary mapping strategy names to their corresponding strategy functions.
 
@@ -35,8 +62,13 @@ def get_strategies():
     }
     return strategy_functions
 
-STRATEGY_FUNCTIONS_BASE = get_strategies()
-STRATEGIES = STRATEGY_FUNCTIONS_BASE.keys()
+STRATEGY_FUNCTIONS = _get_strategies()
+STRATEGIES = STRATEGY_FUNCTIONS.keys()
+
+__all__ = [                                             # everything outsiders may import
+    "HEX_NEIGHBORS", "STRATEGY_FUNCTIONS", "STRATEGIES",
+    "is_winning_move", "is_forcing_win", "infer_player", "fallback_random",
+]
 
 # -------------------------------------------------------------------------------
 # GENERAL HELPER FUNCTIONS FOR RULE BASED AGENT
