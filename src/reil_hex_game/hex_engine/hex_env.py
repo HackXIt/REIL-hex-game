@@ -1,8 +1,4 @@
 import gymnasium as gym
-from reil_hex_game.hex_engine.hex_engine import hexPosition
-import numpy as np
-
-import gymnasium as gym
 import numpy as np
 from reil_hex_game.hex_engine.hex_engine import hexPosition
 
