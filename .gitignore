@@ -1,6 +1,9 @@
 # IDE specific files
 .vscode/.history
 
+# RL 
+runs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
