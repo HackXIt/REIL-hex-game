@@ -72,16 +72,16 @@ def draw_end_zones(surface, game: GameState):
     player_two_colour = game.player_colour[1]
 
     for tile in game.hex_grid.top_row():
-        draw_hex_top_border(surface, game, tile, player_one_colour)
+        draw_hex_left_border(surface, game, tile, player_one_colour)
 
     for tile in game.hex_grid.bottom_row():
-        draw_hex_bottom_border(surface, game, tile, player_one_colour)
-
+        draw_hex_right_border(surface, game, tile, player_one_colour)
+ 
     for tile in game.hex_grid.left_column():
-        draw_hex_left_border(surface, game, tile, player_two_colour)
+        draw_hex_top_border(surface, game, tile, player_two_colour)
 
     for tile in game.hex_grid.right_column():
-        draw_hex_right_border(surface, game, tile, player_two_colour)
+        draw_hex_bottom_border(surface, game, tile, player_two_colour)
 
 
 def draw_frame(surface, game: GameState):

@@ -102,30 +102,34 @@ class HexTile:
 
 
     def center_point(self, offset=0):
+        y, x = self.grid_position
+        rotated_grid = (x, y)
         if self.points_up:
             return points_up_tile_center_point(
-                self.grid_position,
+                rotated_grid,
                 self.width,
                 self.height,
                 offset)
         else:
             return flats_up_tile_center_point(
-                self.grid_position,
+                rotated_grid,
                 self.width,
                 self.height,
                 offset)
 
 
     def corner_points(self, offset=0):
+        y, x = self.grid_position
+        rotated_grid = (x, y)
         if self.points_up:
             return points_up_tile_corner_points(
-                self.grid_position,
+                rotated_grid,
                 self.width,
                 self.height,
                 offset)
         else:
             return flats_up_tile_corner_points(
-                self.grid_position,
+                rotated_grid,
                 self.width,
                 self.height,
                 offset)
