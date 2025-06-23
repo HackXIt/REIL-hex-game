@@ -95,6 +95,21 @@ class hexPosition (object):
             self._human_move_event = threading.Event()
             self._init_pygame_backend(size)
         atexit.register(self.close)      # run at interpreter exit
+
+    # ==============================================================
+    # Helpers for training environment
+    # ==============================================================
+    def legal_moves(self):
+        """
+        Return a list of empty coordinates (row, col) that the current
+        player could legally occupy. Coordinates are 0-based.
+        """
+        return [
+            (r, c)
+            for r in range(self.size)
+            for c in range(self.size)
+            if self.board[r][c] == 0
+        ]
     
     # ==============================================================
     # 🔌  PYGAME INTEGRATION

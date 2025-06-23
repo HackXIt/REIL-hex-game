@@ -81,7 +81,7 @@ class HexEnv(gym.Env):
 
     def _legal_scalar_moves(self):
         """Indices of empty cells (0-valued) in 0 … size²-1 order."""
-        return np.nonzero(self._flat_board() == 0)[0].tolist()
+        return [self.game.coordinate_to_scalar(rc) for rc in self.game.legal_moves()]
 
 class OpponentWrapper(gym.Wrapper):
     """
