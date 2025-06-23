@@ -28,18 +28,21 @@ STRATEGY_USE_COUNT = {name: 0 for name in STRATEGY_FUNCTIONS_ADAPTED}
 
 EVAL_CACHE = {}
 LAST_PLAYER = None
+LAST_MOVE_IS_BRIDGE = False
+
 
 # NOTE THE NAME of the agent function MUST match the filename!
 # Otherwise the agent resolver will not find it.
 # When using an agent like 'uv run reil-hex-game --agent rule_based_v4' the 'agent' at the can be omitted
 def rule_based_v4_agent(board, action_set):
     # global is necessary to ACTUALLY mutate the global variables
-    global LAST_PLAYER, STRATEGY_USE_COUNT
+    global LAST_PLAYER, STRATEGY_USE_COUNT, LAST_MOVE_IS_BRIDGE
 
     size          = len(board)
     player        = infer_player(board)
     opponent      = -player
     LAST_PLAYER   = player
+    
 
     # ------------------------------------------------------------------ #
     # 0️⃣  Early tactical checks (immediate win / block / forcing win)
@@ -62,29 +65,39 @@ def rule_based_v4_agent(board, action_set):
     # ------------------------------------------------------------------ #
     stones       = sum(1 for row in board for cell in row if cell != 0)
     total_cells  = size * size
-    early_game   = stones < 0.30 * total_cells
-    late_game    = stones > 0.70 * total_cells
+    first_move   = (sum(1 for row in board for cell in row if cell != 0) <=1)
+    early_game   = stones < 0.10 * total_cells
+    late_game    = stones > 0.50 * total_cells
 
     STRATEGY_WEIGHTS = {
-        "take_center"                : 5,
-        "extend_own_chain"           : 8,
-        "break_opponent_bridge"      : 7,
-        "protect_own_chain_from_cut" : 6,
-        "create_double_threat"       :10,
-        "shortest_connection_path"   :12,
-        "favor_bridges"              : 2,
+        "take_center"                : 1,
+        "extend_own_chain"           : 3,
+        "break_opponent_bridge"      : 3,
+        "protect_own_chain_from_cut" : 3,
+        "create_double_threat"       : 4,
+        "shortest_connection"        : 4,
+        "make_own_bridge"            : 3,
         "mild_block_threat"          : 2,
-        "advance_toward_goal"        : 4,
-        "block_aligned_opponent_path": 2,
+        "advance_toward_goal"        : 2,
+        "block_aligned_opponent_path": 3,
     }
-    if early_game:
-        STRATEGY_WEIGHTS["take_center"]              += 3
-        STRATEGY_WEIGHTS["extend_own_chain"]         += 2
-        STRATEGY_WEIGHTS["shortest_connection_path"] += 2
-    if late_game:
-        STRATEGY_WEIGHTS["create_double_threat"]     += 3
-        STRATEGY_WEIGHTS["protect_own_chain_from_cut"] += 2
-        STRATEGY_WEIGHTS["shortest_connection_path"] += 3
+    if first_move:
+        STRATEGY_WEIGHTS["take_center"] += 10
+    elif early_game:
+        STRATEGY_WEIGHTS["make_own_bridge"]            += 3
+    elif late_game:
+        STRATEGY_WEIGHTS["block_aligned_opponent_path"]+= 5
+        STRATEGY_WEIGHTS["create_double_threat"]       += 10
+        STRATEGY_WEIGHTS["block_aligned_opponent_path"]+= 10
+    else:
+        STRATEGY_WEIGHTS["block_aligned_opponent_path"]+= 10
+        STRATEGY_WEIGHTS["break_opponent_bridge"]      += 0
+        STRATEGY_WEIGHTS["create_double_threat"]       += 0
+        STRATEGY_WEIGHTS["mild_block_threat"]          += 0
+
+    if LAST_MOVE_IS_BRIDGE:
+        STRATEGY_WEIGHTS["extend_own_chain"] += 5
+        LAST_MOVE_IS_BRIDGE = False   
 
     # ------------------------------------------------------------------ #
     # 2️⃣  Ask **each** strategy once for its favourite move
@@ -130,5 +143,9 @@ def rule_based_v4_agent(board, action_set):
         if move == chosen_move:
             STRATEGY_USE_COUNT[name] += 1
             print(f"  {name}: +{STRATEGY_WEIGHTS[name]}")
+            if name == "make_own_bridge":
+                LAST_MOVE_IS_BRIDGE = True
+
+
 
     return chosen_move
