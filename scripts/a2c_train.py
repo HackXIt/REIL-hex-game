@@ -9,6 +9,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from reil_hex_game.hex_engine.hex_env import HexEnv, OpponentWrapper
 from reil_hex_game.agents.hex_cnn import HexCNN
+from reil_hex_game.agents.rule_based_v4_agent import rule_based_v4_agent
 
 def make_env(size: int, opponent_fn=None):
     """Factory so each worker gets its own environment instance."""
@@ -20,7 +21,10 @@ def make_env(size: int, opponent_fn=None):
     return _f
 
 def train(args):
-    vec_env = SubprocVecEnv([make_env(args.board_size) for _ in range(args.num_envs)])
+    vec_env = SubprocVecEnv([
+        make_env(args.board_size, rule_based_v4_agent if i % 2 == 0 else None)
+        for i in range(args.num_envs)
+    ])
 
     policy_kwargs = dict(
         features_extractor_class=HexCNN,
