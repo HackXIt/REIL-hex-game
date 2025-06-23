@@ -881,7 +881,7 @@ def _locate_strategy_use_count():
 
 def _summary_atexit():
     counts = _locate_strategy_use_count()
-    if counts: print_strategy_summary(counts)
+    if counts and isinstance(counts, dict): print_strategy_summary(counts)
 
 atexit.register(_summary_atexit)
 
