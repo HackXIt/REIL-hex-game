@@ -1,1 +1,1 @@
-from .rule_based_agent import rule_based_agent
+from .rule_based_helper import LAST_STRATEGY_USED

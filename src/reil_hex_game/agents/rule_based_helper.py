@@ -1,22 +1,46 @@
-import random, heapq, atexit, inspect, sys
+import random
+import heapq
+import atexit
+import inspect
+import sys
 import math
+import pprint
 from ..hex_engine.hex_engine import hexPosition
 from copy import deepcopy
 from typing import List, Tuple, Dict, Callable, Set, Optional
-from collections import deque
-import heapq
+from collections import deque, Counter
 
 # -------------------------------------------------------------------------------
 # CONSTANTS
 # -------------------------------------------------------------------------------
 Coordinate = Tuple[int, int]
 # Neighboring directions on a hex grid (pointy-top orientation)
-HEX_NEIGHBORS = [(-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0)]
+HEX_NEIGHBORS: List[Coordinate] = [
+    (-1, 0), (-1, 1),  # N, NE
+    (0, -1), (0, 1),   # W, E
+    (1, -1), (1, 0),   # SW, S
+]
 ADJACENCY_MAPS: Dict[int, Dict[Coordinate, List[Coordinate]]] = {}
+
+_STRATEGY_COUNTER: Counter[str] = Counter()
+
+LAST_STRATEGY_USED: str | None = None
 
 # -------------------------------------------------------------------------------
 # GENERAL HELPER FUNCTIONS FOR RULE BASED AGENT
 # -------------------------------------------------------------------------------
+def _bump_strategy(name: str) -> None:
+    """Increment global usage count for `name`."""
+    global LAST_STRATEGY_USED
+    LAST_STRATEGY_USED = name
+    _STRATEGY_COUNTER[name] += 1
+
+
+def get_strategy_counts() -> dict[str, int]:
+    """Return a *shallow copy* so callers cannot mutate the original."""
+    return dict(_STRATEGY_COUNTER)
+
+
 def get_adjacency_map(size: int) -> Dict[Coordinate, List[Coordinate]]:
     if size in ADJACENCY_MAPS:
         return ADJACENCY_MAPS[size]
@@ -77,6 +101,7 @@ def infer_player(board):
     flat = [c for row in board for c in row]
     return 1 if flat.count(1) <= flat.count(-1) else -1
 
+
 def announce_agent_color(board):
     """
     Announces the color (White or Black) that the agent is currently playing as, 
@@ -130,6 +155,7 @@ def is_winning_move(board, move, player, EVAL_CACHE={}):
     EVAL_CACHE[key] = player if result else 0
     return result
 
+
 def is_forcing_win(board, move, player, EVAL_CACHE={}):
     """
     Determines if a given move is a forcing win for the specified player on the current Hex board.
@@ -171,6 +197,7 @@ def is_forcing_win(board, move, player, EVAL_CACHE={}):
             EVAL_CACHE[test_key] = player
             return True
     return False
+
 
 def find_most_direct_chain(board: List[List[int]], player: int, adjacency_map: Dict[Coordinate, List[Coordinate]]) -> Set[Coordinate]:
     size = len(board)
@@ -214,6 +241,7 @@ def find_most_direct_chain(board: List[List[int]], player: int, adjacency_map: D
 
     return best_chain
 
+
 def get_neighbors(i, j, size):
     """
     Returns a list of valid neighboring cell coordinates for a given cell (i, j) on a hexagonal grid.
@@ -236,6 +264,7 @@ def get_neighbors(i, j, size):
         for di, dj in HEX_NEIGHBORS
         if 0 <= i+di < size and 0 <= j+dj < size
     ]
+
 
 def neighbors(board, player, cell):
     """
@@ -292,7 +321,6 @@ def chain_cut_along_axis(board, player, edge_coords):
         return not (any(y == 0 for y, _ in reached) and any(y == size - 1 for y, _ in reached))
 
 
-
 def dijkstra_shortest_paths(
     start_nodes: List[Coordinate],
     neighbor_fn: Callable[[Coordinate], List[Coordinate]],
@@ -319,6 +347,7 @@ def dijkstra_shortest_paths(
                 prev[nbr] = node
                 heapq.heappush(pq, (new_d, nbr))
     return dist, prev
+
 
 # 2. Compute the full shortest path
 def shortest_connection_path(board: List[List[int]], player: int) -> Optional[List[Coordinate]]:
@@ -356,8 +385,6 @@ def shortest_connection_path(board: List[List[int]], player: int) -> Optional[Li
     return list(reversed(path))
 
 
-
-
 def is_cut_point(board, player):
     """
     Determines if the given player's stones on the board form a 'cut point'.
@@ -390,6 +417,7 @@ def is_cut_point(board, player):
     dfs(starts[0][0], starts[0][1])
     return len(visited) < len(starts)
 
+
 def fallback_random(action_set):
     """
     Selects and returns a random action from the provided set of actions.
@@ -407,6 +435,34 @@ def fallback_random(action_set):
         The function relies on the global 'random' module being imported.
     """
     return random.choice(action_set)
+
+
+def _axis_connected(board, player, starts, goals):
+    """
+    Checks if there's still a player-path connecting the start-edge to the goal-edge,
+    using only player's stones (connected via get_neighbors).
+    """
+    size = len(board)
+    from collections import deque
+
+    visited = set()
+    q = deque([s for s in starts if board[s[0]][s[1]] == player])
+    visited.update(q)
+
+    while q:
+        ci, cj = q.popleft()
+        if (ci, cj) in goals:
+            return True
+        for ni, nj in get_neighbors(ci, cj, size):
+            if board[ni][nj] == player and (ni, nj) not in visited:
+                visited.add((ni, nj))
+                q.append((ni, nj))
+    return False
+
+
+def _euclid(a: Coordinate, b: Coordinate) -> float:
+    """Return Euclidean distance between two coordinates."""
+    return math.hypot(a[0] - b[0], a[1] - b[1])
 
 # -------------------------------------------------------------------------------
 # BASE STRATEGY FUNCTIONS
@@ -427,18 +483,17 @@ def take_center(board, action_set, player):
     """
     if not action_set:
         return None
+    _bump_strategy("take_center")
     size = len(board)
     center = (size // 2, size // 2)
+    return min(action_set, key=lambda move: _euclid(move, center))
 
-    def distance(a: Coordinate, b: Coordinate) -> float:
-        return math.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
-
-    return min(action_set, key=lambda move: distance(move, center))
 
 def extend_own_chain(board, action_set, player):
     """
     
     """
+    _bump_strategy("extend_own_chain")
     size = len(board)
     adjacency_map = get_adjacency_map(size)
 
@@ -475,8 +530,8 @@ def extend_own_chain(board, action_set, player):
     return None
 
 
-
 def shortest_connection(board: List[List[int]], action_set: List[Coordinate], player: int) -> Optional[Coordinate]:
+    _bump_strategy("shortest_connection")
     best_move = None
     best_cost = float('inf')
     for move in action_set:
@@ -499,7 +554,6 @@ def shortest_connection(board: List[List[int]], action_set: List[Coordinate], pl
     return best_move
 
 
-
 def break_opponent_bridge(board, action_set, player):
     """
     Attempts to find and return a move that breaks an opponent's bridge formation.
@@ -519,6 +573,7 @@ def break_opponent_bridge(board, action_set, player):
         tuple[int, int] or None: The coordinates (row, col) of a move that breaks an opponent's bridge,
                                  or None if no such move is found.
     """
+    _bump_strategy("break_opponent_bridge")
     size = len(board)
     enemy = -player
     for i in range(size):
@@ -533,6 +588,7 @@ def break_opponent_bridge(board, action_set, player):
                     (mi, mj) in action_set and board[mi][mj] == 0):
                     return (mi, mj)
     return None
+
 
 def protect_own_chain_from_cut(board, action_set, player):
     """
@@ -550,6 +606,7 @@ def protect_own_chain_from_cut(board, action_set, player):
     Returns:
         tuple[int, int] or None: The (row, column) action that protects the player's chain, or None if no such action exists.
     """
+    _bump_strategy("protect_own_chain_from_cut")
     for i, j in action_set:
         board[i][j] = player
         cut = is_cut_point(board, player)
@@ -557,35 +614,6 @@ def protect_own_chain_from_cut(board, action_set, player):
         if not cut:
             return (i, j)
     return None
-
-
-
-
-
-
-def _axis_connected(board, player, starts, goals):
-    """
-    Checks if there's still a player-path connecting the start-edge to the goal-edge,
-    using only player's stones (connected via get_neighbors).
-    """
-    size = len(board)
-    from collections import deque
-
-    visited = set()
-    q = deque([s for s in starts if board[s[0]][s[1]] == player])
-    visited.update(q)
-
-    while q:
-        ci, cj = q.popleft()
-        if (ci, cj) in goals:
-            return True
-        for ni, nj in get_neighbors(ci, cj, size):
-            if board[ni][nj] == player and (ni, nj) not in visited:
-                visited.add((ni, nj))
-                q.append((ni, nj))
-    return False
-
-
 
 
 def create_double_threat(board, action_set, player):
@@ -607,6 +635,7 @@ def create_double_threat(board, action_set, player):
         This function assumes the existence of a helper function `get_neighbors(i, j, size)` that returns the neighboring positions
         of a given cell (i, j) on the board of the specified size.
     """
+    _bump_strategy("create_double_threat")
     size = len(board)
     clusters = []
     visited = set()
@@ -633,9 +662,6 @@ def create_double_threat(board, action_set, player):
         if count >= 2:
             return (i, j)
     return None
-
-
-
 
 
 def make_own_bridge(board: List[List[int]], action_set: List[Coordinate], player: int) -> Coordinate | None:
@@ -670,6 +696,7 @@ def make_own_bridge(board: List[List[int]], action_set: List[Coordinate], player
 
     if not candidates:
         return None
+    _bump_strategy("make_own_bridge")
 
     # Separate directional vs basic bridges
     directional = [c for c in candidates if abs(c[1]) + abs(c[2]) > 2]
@@ -700,6 +727,7 @@ def mild_block_threat(board: List[List[int]], action_set: List[Coordinate], play
     """
     if not action_set:
         return None
+    _bump_strategy("mild_block_threat")
 
     if player is None:
         player = infer_player(board)
@@ -726,6 +754,7 @@ def mild_block_threat(board: List[List[int]], action_set: List[Coordinate], play
 
     return best_move
 
+
 def advance_toward_goal(board, action_set, player):
     """
     Strategy that selects a move advancing toward the goal direction:
@@ -736,6 +765,7 @@ def advance_toward_goal(board, action_set, player):
     """
     if not action_set:
         return None
+    _bump_strategy("advance_toward_goal")
 
     size = len(board)
 
@@ -745,50 +775,6 @@ def advance_toward_goal(board, action_set, player):
     else:  # White: left ↔ right → prioritize columns (j)
         return max(action_set, key=lambda m: m[1])
 
-
-
-def block_aligned_opponent_path1(board: List[List[int]], action_set: List[Coordinate], player: int = None) -> Optional[Coordinate]:
-    """
-    Selects a move that blocks the opponent's most aligned path toward victory in Hex.
-
-    For opponent 1 (White), block columns (left-right win).
-    For opponent -1 (Black), block rows (top-bottom win).
-    """
-    if player is None:
-        player = infer_player(board)
-    opponent = -player
-    size = len(board)
-
-    # Count opponent's stones along their winning axis
-    axis_counts = [0] * size
-    for i in range(size):
-        for j in range(size):
-            if board[i][j] == opponent:
-                axis = i if opponent == -1 else j  # now fixed
-                axis_counts[axis] += 1
-
-    max_count = max(axis_counts)
-    if max_count == 0:
-        return None
-
-    best_axis = axis_counts.index(max_count)
-    center = size // 2
-
-    # Find our moves that sit on that axis
-    candidates = [
-        move for move in action_set
-        if (opponent == -1 and move[0] == best_axis) or
-           (opponent == 1 and move[1] == best_axis)
-    ]
-
-    if not candidates:
-        return None
-
-    # Prioritize moves closest to the center (other axis)
-    return min(
-        candidates,
-        key=lambda m: abs((m[1] if opponent == -1 else m[0]) - center)
-    )
 
 def block_aligned_opponent_path(board: List[List[int]], action_set: List[Coordinate], player: int = None) -> Optional[Coordinate]:
     """
@@ -807,7 +793,7 @@ def block_aligned_opponent_path(board: List[List[int]], action_set: List[Coordin
     for i in range(size):
         for j in range(size):
             if board[i][j] == opponent:
-                axis = j if opponent == -1 else i  # ✅ fixed: white = horizontal = j-aligned
+                axis = j if opponent == -1 else i  # white = horizontal = j-aligned
                 axis_counts[axis] += 1
 
     max_count = max(axis_counts)
@@ -827,12 +813,12 @@ def block_aligned_opponent_path(board: List[List[int]], action_set: List[Coordin
     if not candidates:
         return None
 
+    _bump_strategy("block_aligned_opponent_path")
     # Prioritize moves closest to the center (on the other axis)
     return min(
         candidates,
-        key=lambda m: abs((m[0] if opponent == -1 else m[1]) - center)  # ✅ fixed to center of correct axis
+        key=lambda m: abs((m[0] if opponent == -1 else m[1]) - center)  # fixed to center of correct axis
     )
-
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -879,13 +865,16 @@ def _locate_strategy_use_count():
             return getattr(mod, "STRATEGY_USE_COUNT")
     return None
 
+@atexit.register
 def _summary_atexit():
-    counts = _locate_strategy_use_count()
-    if counts and isinstance(counts, dict): print_strategy_summary(counts)
-
-atexit.register(_summary_atexit)
+    if _STRATEGY_COUNTER:
+        print("\nStrategy usage summary:")
+        pprint.pprint(_STRATEGY_COUNTER)
+    else:
+        counts = _locate_strategy_use_count()
+        if counts and isinstance(counts, dict): print_strategy_summary(counts)
 
 __all__ = [
-    "HEX_NEIGHBORS", "STRATEGY_FUNCTIONS", "STRATEGIES",
+    "HEX_NEIGHBORS", "STRATEGY_FUNCTIONS", "STRATEGIES", "LAST_STRATEGY_USED",
     "is_winning_move", "is_forcing_win", "infer_player", "fallback_random",
 ]

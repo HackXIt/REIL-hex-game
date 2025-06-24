@@ -92,14 +92,29 @@ class OpponentWrapper(gym.Wrapper):
         super().__init__(env)
         self.opponent_fn = opponent_fn
 
+    @staticmethod
+    def get_last_strategy():
+        try:
+            from reil_hex_game.agents import LAST_STRATEGY_USED
+        except ImportError:
+            # If the agent does not define LAST_STRATEGY_USED, return None
+            return None
+        return LAST_STRATEGY_USED
+
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
-        if not terminated:
+        if not (terminated or truncated):
             # opponent responds immediately
             board_mat = self.env.game.board
             legal = self.env.game.legal_moves()
             opp_coord = self.opponent_fn(board_mat, legal)
             self.env.game.move(opp_coord)
+            last_strategy = self.get_last_strategy()
+            if last_strategy:
+                info["opponent_strategy"] = last_strategy
+            else:
+                info["opponent_strategy"] = "unknown"
+            info["opponent_move"] = opp_coord
             # flip reward sign because turns alternate
             reward = -reward
             terminated = self.env.game.winner != 0
