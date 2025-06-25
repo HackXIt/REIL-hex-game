@@ -22,6 +22,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 # ── project imports -----------------------------------------------------
 from reil_hex_game.hex_engine.hex_env import HexEnv, OpponentWrapper
+from reil_hex_game.hex_engine.side_swap_wrapper import SideSwapWrapper
 from reil_hex_game.agents.hex_cnn import HexCNN
 from reil_hex_game.agents.rule_based_v3_agent import rule_based_v3_agent
 from reil_hex_game.agents.rule_based_v4_agent import rule_based_v4_agent
@@ -92,7 +93,8 @@ def make_train_env(board_size: int, opponent_fn):
     """Return a callable that builds ONE env with the chosen opponent."""
     def _factory():
         env = HexEnv(board_size)
-        env = OpponentWrapper(env, opponent_fn)
+        # env = OpponentWrapper(env, opponent_fn)
+        env = SideSwapWrapper(env, opponent_fn, prob_start_first=0.5)
         env = ActionMasker(env, mask_fn)        # <- supplies legality mask
         return env
     return _factory
@@ -102,7 +104,8 @@ def make_eval_env(board_size: int, video_folder: str | None, video_len: int = 30
     """Single-worker DummyVecEnv, wrapped for masking + (optional) video."""
     def _factory():
         env = HexEnv(board_size, render_mode="rgb_array")
-        env = OpponentWrapper(env, rule_based_v4_agent)
+        # env = OpponentWrapper(env, rule_based_v4_agent)
+        env = SideSwapWrapper(env, rule_based_v4_agent, prob_start_first=0.5)
         env = ActionMasker(env, mask_fn)
         return Monitor(env)
 

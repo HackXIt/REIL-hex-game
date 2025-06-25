@@ -25,11 +25,13 @@ class HexEnv(gym.Env):
     _SHAPING_SCALE = 0.01
     _GAMMA = 0.99
 
-    def __init__(self, size: int = 7, render_mode: str | None = None):
+    def __init__(self, size: int = 7, render_mode: str | None = None, prob_start_first: float = 0.5):
         super().__init__()
         assert render_mode in {None, *self.metadata["render_modes"]}
         self.render_mode = render_mode
         self.size = size
+        self.prob_start_first = prob_start_first
+        self.agent_side = 1
         self.game = hexPosition(size=size)
 
         # one flat action per board cell
@@ -63,7 +65,7 @@ class HexEnv(gym.Env):
         """
         Required by Gymnasium: must return (observation, info).
         """
-        super().reset(seed=seed)
+        super().reset(seed=seed, options=options)
         self.game.reset()
         self._last_potential = self._potential()   # initialise ϕ(s₀)
         return self._obs(), {}
