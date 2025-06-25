@@ -167,14 +167,31 @@ class hexPosition (object):
     #  Public clean-up – safe to call multiple times
     # ──────────────────────────────────────────────────────────────────
     def close(self) -> None:
+        """Gracefully stop the GUI thread **and** unblock every waiter."""
         self._closing = True
-        if not getattr(self, "_use_pygame", False):
-            return
-        if getattr(self, "_shutdown_event", None):
-            self._shutdown_event.set()           # tell game_loop to exit
-        if (t := getattr(self, "_pygame_thread", None)) and t.is_alive():
-            if threading.current_thread() is not t:
-                t.join(timeout=3)  # wait briefly
+
+        # ----- unblock any waiting game-logic loops ---------------------
+        for ev_name in ('_click_event', '_human_move_event'):
+            ev = getattr(self, ev_name, None)
+            if ev:                          # Event object exists?
+                ev.set()                    # ...then wake its waiters
+
+        # step_event lives inside the GameState object
+        gs = getattr(self, '_pygame_game_state', None)
+        if gs:
+            if getattr(gs, 'step_event', None):
+                gs.step_event.set()
+            if getattr(gs, 'click_event', None):
+                gs.click_event.set()
+
+        # ----- tell pygame loop to leave its while-loop -----------------
+        if getattr(self, '_shutdown_event', None):
+            self._shutdown_event.set()
+
+        # ----- join the GUI thread (unless we *are* that thread) -------
+        t = getattr(self, '_pygame_thread', None)
+        if t and t.is_alive() and threading.current_thread() is not t:
+            t.join(timeout=3)
 
     # ==============================================================
     # 🎮  Core gameplay primitives
@@ -199,7 +216,8 @@ class hexPosition (object):
 
         if hasattr(self, '_click_event') and self._click_event:
             # If the GUI is active, signal the click event to continue
-            self._click_event.set()
+            if current_player == getattr(self, "_human_player", current_player):
+                self._click_event.set()
 
         # *Console output*: only moves when GUI is active
         if self._use_pygame:
@@ -427,6 +445,8 @@ class hexPosition (object):
             from random import choice
             machine = lambda b, a: choice(a)
 
+        self._human_player = human_player # remember color of human player
+
         self.reset()
         gs = self._pygame_game_state
         gs.status_message = 'Your turn - click a hex'
@@ -436,11 +456,9 @@ class hexPosition (object):
         gs.click_event = click_event
 
         while self.winner == 0 and not self._closing:
-            if self.player == human_player:
-                click_event.wait()
+            if self.player == self._human_player:
                 while not self._closing and not click_event.wait(0.05):
                     pass
-                click_event.clear()
                 if self._closing:
                     break
             else:
@@ -461,7 +479,6 @@ class hexPosition (object):
         gs.click_event = click_event
 
         while self.winner == 0 and not self._closing:
-            click_event.wait()
             while not self._closing and not click_event.wait(0.05):
                 pass
             click_event.clear()

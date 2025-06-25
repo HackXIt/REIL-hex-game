@@ -7,6 +7,7 @@ import sys, pygame
 from .game_state import GameState
 
 def on_quit(event, game: GameState):
+    # Always quitting when called, no matter the event type
     game.engine.close() if getattr(game, "engine", None) else sys.exit()
 
 def on_key_down(event, game):
@@ -33,6 +34,9 @@ def on_mouse_down(event, game):
         #  When a hexPosition engine is attached, delegate the move to it
         #  so that the logical board and the GUI stay in perfect sync.
         if getattr(game, "engine", None):
+            # discard clicks during the bot’s turn
+            if hasattr(game.engine, "_human_player") and game.engine.player != game.engine._human_player:
+                return
             game.engine.move(game.nearest_tile_to_mouse.grid_position)
         else:
             game.take_move()
