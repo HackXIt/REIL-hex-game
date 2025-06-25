@@ -24,6 +24,10 @@ _ALGOS = {
     "alphazero":  "az_train",
 }
 
+def parse_timesteps(x: str) -> int:
+    """Accept int literals or scientific notation like 3e6."""
+    return int(float(x.replace("_", "")))   # allows 1_000_000 too
+
 # -------------------------------------------------------------------------
 # Argument handling
 # -------------------------------------------------------------------------
@@ -36,9 +40,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Training algorithm back-end")
     p.add_argument("--board-size", type=int, default=7,
                    help="Hex board side length (default 7)")
-    p.add_argument("--timesteps", type=int, default=int(3e6),
+    p.add_argument("--timesteps", type=parse_timesteps, default=1_000_000,
                    help="Total environment steps for on-policy algos or "
-                        "frames for off-policy (default 3 000 000)")
+                        "frames for off-policy (default 1 000 000)")
     p.add_argument("--num-envs", type=int, default=16,
                    help="Parallel Gymnasium environments (vectorised)")
     p.add_argument("--run-name", default=None,
@@ -50,6 +54,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--resume", action="store_true",
                    help="Continue training from the latest checkpoint "
                         "in --save-dir")
+    p.add_argument("--video-every", type=int, default=0,
+                   help="Record a rollout every N environment steps (0 = disable video)")
+    p.add_argument("--video-len", type=int, default=200,
+                   help="Number of frames per recorded video")
+    p.add_argument("--video-eval", action="store_true",
+                   help="Render evaluation games (rgb_array) so they appear in the video stream too.")
+    p.add_argument("--rule-fraction", type=float, default=0.5, help="Fraction of parallel envs that include the rule-based opponent.")
     return p.parse_args(argv)
 
 # -------------------------------------------------------------------------
