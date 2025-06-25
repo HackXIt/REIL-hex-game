@@ -10,6 +10,21 @@ class HexEnv(gym.Env):
         "render_fps": 30,
     }
 
+    _STRATEGY_WEIGHTS = {
+        "take_center"                : 1,
+        "extend_own_chain"           : 3,
+        "break_opponent_bridge"      : 3,
+        "protect_own_chain_from_cut" : 3,
+        "create_double_threat"       : 4,
+        "shortest_connection"        : 4,
+        "make_own_bridge"            : 3,
+        "mild_block_threat"          : 2,
+        "advance_toward_goal"        : 2,
+        "block_aligned_opponent_path": 3,
+    }
+    _SHAPING_SCALE = 0.01
+    _GAMMA = 0.99
+
     def __init__(self, size: int = 7, render_mode: str | None = None):
         super().__init__()
         assert render_mode in {None, *self.metadata["render_modes"]}
@@ -50,7 +65,8 @@ class HexEnv(gym.Env):
         """
         super().reset(seed=seed)
         self.game.reset()
-        return self._obs(), {}         # empty info-dict
+        self._last_potential = self._potential()   # initialise ϕ(s₀)
+        return self._obs(), {}
 
     # -------------------------------------------------------------
     # Gym step ----------------------------------------------------
@@ -62,13 +78,20 @@ class HexEnv(gym.Env):
             return self._obs(), reward, terminated, truncated, {}
  
         coord = self.game.scalar_to_coordinates(action)
-        self.game.move(coord)                 # one legal move
+        self.game.move(coord)
 
-        terminated = self.game.winner != 0    # game finished?
-        truncated  = False                    # no time-limit
-        reward = float(self.game.winner) if terminated else 0.0
+        terminated = self.game.winner != 0
+        truncated  = False
+        sparse_r   = float(self.game.winner) if terminated else 0.0
 
-        return self._obs(), reward, terminated, truncated, {}
+        # ----- dense shaping -------------------------------------------------
+        new_pot = self._potential()
+        shaping = self._GAMMA * new_pot - self._last_potential
+        self._last_potential = new_pot
+
+        reward = sparse_r + shaping      # ← final reward returned to PPO
+        info = {"shaping": shaping, "potential": new_pot}
+        return self._obs(), reward, terminated, truncated, info
 
     def action_masks(self):
         """Boolean mask – True where the move is **allowed**."""
@@ -80,38 +103,53 @@ class HexEnv(gym.Env):
     # Gym render --------------------------------------------------
     # -------------------------------------------------------------
     def render(self, *_, **__):
-        mode = self.render_mode
+        mode = self.render_mode or "rgb_array"
         if mode not in self.metadata["render_modes"]:
             raise ValueError(f"unsupported render_mode={mode!r}")
 
-        # ---- build the two lists of coordinates (what draw_frame expects) ----
-        white, black = [], []
-        for r in range(self.size):
-            for c in range(self.size):
-                cell = self.game.board[r][c]
-                if cell == 1:
-                    white.append((r, c))
-                elif cell == -1:
-                    black.append((r, c))
+        # ─── build / cache a GameState that matches the board size ────────
+        if not hasattr(self, "_gs"):
+            from reil_hex_game.hex_engine.hex_pygame import game_state
+            self._gs = game_state.GameState()
+            self._gs.board_width_tiles  = self.size
+            self._gs.board_height_tiles = self.size
+            self._gs.hex_tile_size      = 32
+            self._gs.generate_board()                       # re-create grid
+        gs = self._gs
 
-        # ---- build the GameState object expected by draw_frame ----------
-        from reil_hex_game.hex_engine.hex_pygame import game_state, game_draw
+        # ─── update tile colours to reflect self.game.board ───────────────
+        empty_c, p1_c, p2_c = (
+            gs.empty_hex_colour,
+            gs.player_colour[0],
+            gs.player_colour[1],
+        )
 
-        gs = game_state.GameState()
-        # deep-copy the current board (7 × 7 ints) so pygame can mark it
-        gs.board = [row[:] for row in self.game.board]
+        for (row, col), tile in gs.hex_grid.tiles.items():
+            if row < self.size and col < self.size:
+                cell = self.game.board[row][col]
+                tile.colour = p1_c if cell == 1 else p2_c if cell == -1 else empty_c
+            else:
+                tile.colour = empty_c                       # unused tiles
 
+        # ─── compute and cache winning path once ─────────────────────
+        if self.game.winner != 0 and gs.solution is None:
+            gs.solution = gs.find_solution()
+
+        # ─── draw onto the cached off-screen surface ──────────────────────
+        from reil_hex_game.hex_engine.hex_pygame import game_draw
         game_draw.draw_frame(self._surface, gs, flip=False)
 
-        if mode == "human":
+        if mode == "human":                                 # on-screen debug
             self._screen.blit(self._surface, (0, 0))
             pygame.display.flip()
             pygame.event.pump()
             return None
-        else:  # "rgb_array"
-            frame = np.transpose(pygame.surfarray.array3d(self._surface),
-                                (1, 0, 2)).copy()
-            return frame
+
+        # rgb_array – turn Surface → np.ndarray(H, W, 3) uint8
+        frame = np.transpose(
+            pygame.surfarray.array3d(self._surface), (1, 0, 2)
+        ).copy()
+        return frame
 
     # -------------------------------------------------------------
     # Gym close ---------------------------------------------------
@@ -127,10 +165,10 @@ class HexEnv(gym.Env):
         """
         3-channel tensor (C, H, W):
         0: player-1 stones
-        1: player-(−1) stones
+        1: player-(-1) stones
         2: “who-to-move” flag (all 1 if P1 to move, 0 otherwise)
         Counting stones - not `self.game.current_player` - avoids
-        relying on a field that doesn’t exist in hexPosition.
+        relying on a field that doesn't exist in hexPosition.
         """
         board = np.asarray(self.game.board, dtype=np.float32)
         p1_layer  = (board ==  1).astype(np.float32)
@@ -149,6 +187,49 @@ class HexEnv(gym.Env):
     def _legal_scalar_moves(self):
         """Indices of empty cells (0-valued) in 0 … size²-1 order."""
         return [self.game.coordinate_to_scalar(rc) for rc in self.game.legal_moves()]
+    
+    def _potential(self) -> float:
+        """
+        Dense heuristic φ(s) built from *all* rule-based strategies.
+        Positive is good for the current player.
+        """
+        from reil_hex_game.agents import rule_based_helper as rh
+        player = 1 if self._to_move() == 1 else -1
+        board  = self.game.board
+        action_set = self.game.legal_moves()   # whatever the helper functions need
+
+        # --- 1. path-length term (same as before) --------------------------
+        path = rh.shortest_connection_path(board, player)
+        path_len = self.size * 2 if path is None else len(path) - 1
+        pot = -self._SHAPING_SCALE * float(path_len)
+
+        # --- 2. add weighted bonuses for every strategy --------------------
+        # Map helper names → callables (import once for speed)
+        if not hasattr(self, "_strat_fns"):
+            from reil_hex_game.agents import rule_based_helper as rh
+            self._strat_fns = {
+                "take_center"                : rh.take_center,
+                "extend_own_chain"           : rh.extend_own_chain,
+                "break_opponent_bridge"      : rh.break_opponent_bridge,
+                "protect_own_chain_from_cut" : rh.protect_own_chain_from_cut,
+                "create_double_threat"       : rh.create_double_threat,
+                "shortest_connection"        : rh.shortest_connection,
+                "make_own_bridge"            : rh.make_own_bridge,
+                "mild_block_threat"          : rh.mild_block_threat,
+                "advance_toward_goal"        : rh.advance_toward_goal,
+                "block_aligned_opponent_path": rh.block_aligned_opponent_path,
+            }
+
+        for name, fn in self._strat_fns.items():
+            if fn(board, action_set, player):          # returns bool
+                pot += 0.05 * self._STRATEGY_WEIGHTS[name]  # 1-to-4 → 0.05-0.20
+
+        # --- clamp for stability ------------------------------------------
+        return max(-1.0, min(1.0, pot))
+
+    def _to_move(self):
+        flat = np.ravel(self.game.board)
+        return 1 if np.count_nonzero(flat == 1) == np.count_nonzero(flat == -1) else -1
 
 class OpponentWrapper(gym.Wrapper):
     """
