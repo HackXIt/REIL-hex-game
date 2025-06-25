@@ -94,10 +94,13 @@ class HexEnv(gym.Env):
                 elif cell == -1:
                     black.append((r, c))
 
+        # ---- build the GameState object expected by draw_frame ----------
         from reil_hex_game.hex_engine.hex_pygame import game_state, game_draw
+
         gs = game_state.GameState()
-        gs.white_hexes = white          # <──── draw_frame looks at these!
-        gs.black_hexes = black
+        # deep-copy the current board (7 × 7 ints) so pygame can mark it
+        gs.board = [row[:] for row in self.game.board]
+
         game_draw.draw_frame(self._surface, gs, flip=False)
 
         if mode == "human":
@@ -183,3 +186,7 @@ class OpponentWrapper(gym.Wrapper):
             reward = -reward
             terminated = self.env.game.winner != 0
         return self.env._obs(), reward, terminated, truncated, info
+    
+    def action_masks(self): # Forward in-case of ordering issue in environment wrappers
+        """Return the action mask for the current player."""
+        return self.env.action_masks()
