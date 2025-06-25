@@ -1,12 +1,19 @@
 import gymnasium as gym
 import numpy as np
 from reil_hex_game.hex_engine.hex_engine import hexPosition
+import pygame
+from pygame import surfarray
 
 class HexEnv(gym.Env):
-    metadata = {"render_modes": ["human"]}
+    metadata = {
+        "render_modes": ["human", "rgb_array"],
+        "render_fps": 30,
+    }
 
-    def __init__(self, size: int = 7):
+    def __init__(self, size: int = 7, render_mode: str | None = None):
         super().__init__()
+        assert render_mode in {None, *self.metadata["render_modes"]}
+        self.render_mode = render_mode
         self.size = size
         self.game = hexPosition(size=size)
 
@@ -17,6 +24,22 @@ class HexEnv(gym.Env):
         self.observation_space = gym.spaces.Box(
             low=0, high=1, shape=(3, size, size), dtype=np.float32
         )
+
+        # -------- pygame init (only once) -----------------------------
+        if self.render_mode == "human":
+            pygame.init()
+            # off-screen buffer; reused every call
+            self._surface = pygame.Surface((800, 800)).convert()
+            if self.render_mode == "human":
+                # visible window
+                self._screen = pygame.display.set_mode(
+                    self._surface.get_size(),
+                    pygame.SCALED | pygame.DOUBLEBUF
+                )
+        elif self.render_mode == "rgb_array":
+            pygame.init()
+            # make an off-screen surface that does NOT depend on display format
+            self._surface = pygame.Surface((800, 800), flags=pygame.SRCALPHA)
 
     # -------------------------------------------------------------
     # Gym reset ---------------------------------------------------
@@ -52,6 +75,40 @@ class HexEnv(gym.Env):
         mask = np.zeros(self.size * self.size, dtype=bool)
         mask[self._legal_scalar_moves()] = True
         return mask
+
+    # -------------------------------------------------------------
+    # Gym render --------------------------------------------------
+    # -------------------------------------------------------------
+    def render(self):
+        if self.render_mode is None:
+            raise ValueError("render_mode was None, set it in __init__")
+
+        # draw current board onto self._surface via your helper modules
+        from reil_hex_game.hex_engine.hex_pygame import (
+            game_state, game_draw
+        )
+        gs = game_state.GameState()
+        gs.board = [row[:] for row in self.game.board]  # copy current board
+        game_draw.draw_frame(self._surface, gs)         # renders one frame
+
+        if self.render_mode == "human":
+            self._screen.blit(self._surface, (0, 0))
+            pygame.display.flip()
+            pygame.event.pump()   # keeps window responsive
+            return None
+        else:  # "rgb_array"
+            # (W,H,3) → transpose to (H,W,3); copy to contiguous uint8
+            frame = np.transpose(
+                surfarray.array3d(self._surface), (1, 0, 2)
+            ).copy()
+            return frame
+
+    # -------------------------------------------------------------
+    # Gym close ---------------------------------------------------
+    # -------------------------------------------------------------
+    def close(self):
+        if self.render_mode is not None:
+            pygame.quit()
 
     # -------------------------------------------------------------
     # Helpers
