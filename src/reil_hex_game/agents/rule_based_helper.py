@@ -9,6 +9,9 @@ from ..hex_engine.hex_engine import hexPosition
 from copy import deepcopy
 from typing import List, Tuple, Dict, Callable, Set, Optional
 from collections import deque, Counter
+from functools import lru_cache
+import numba as nb
+import numpy as np
 
 # -------------------------------------------------------------------------------
 # CONSTANTS
@@ -119,6 +122,12 @@ def announce_agent_color(board):
     color = "White (○)" if player == 1 else "Black (●)"
     print(f"\n Your agent is playing as: {color}")
 
+@lru_cache(maxsize=131_072)                #   131 k  board states ≈  20 MB RAM
+def _eval_position(board_key: tuple, player: int, size: int) -> bool:
+    sim = hexPosition(size=size)
+    sim.board = [list(board_key[i*size:(i+1)*size]) for i in range(size)]
+    return sim._evaluate_white(False) if player == 1 else sim._evaluate_black(False)
+
 # -------------------------------------------------------------------------------
 # STRATEGY HELPER FUNCTIONS
 # -------------------------------------------------------------------------------
@@ -141,19 +150,15 @@ def is_winning_move(board, move, player, EVAL_CACHE={}):
     Returns:
         bool: True if the move results in a win for the player, False otherwise.
     """
-    new_board = deepcopy(board)
-    new_board[move[0]][move[1]] = player
-    key = cache_key(new_board)
-    if key in EVAL_CACHE:
-        return EVAL_CACHE[key] == player
-    sim = hexPosition(size=len(board))
-    sim.board = new_board
-    if player == 1:
-        result = sim._evaluate_white(False)
-    else:
-        result = sim._evaluate_black(False)
-    EVAL_CACHE[key] = player if result else 0
-    return result
+    tmp = cache_key(board)                 # tuple-of-tuples – already hashable
+    if tmp not in EVAL_CACHE:
+        # patch board-key instead of deep-copying whole board
+        lst = list(sum(tmp, ()))           # flatten once
+        idx = move[0]*len(board) + move[1]
+        lst[idx] = player
+        new_key = tuple(lst)
+        EVAL_CACHE[(new_key, player)] = _eval_position(new_key, player, len(board))
+    return EVAL_CACHE[(new_key, player)]
 
 
 def is_forcing_win(board, move, player, EVAL_CACHE={}):
@@ -174,7 +179,7 @@ def is_forcing_win(board, move, player, EVAL_CACHE={}):
     Returns:
         bool: True if the move is a forcing win for the player, False otherwise.
     """
-    new_board = deepcopy(board)
+    new_board  = [row[:] for row in board]          # faster than deepcopy
     new_board[move[0]][move[1]] = player
     key = cache_key(new_board)
     sim = hexPosition(size=len(board))
@@ -186,7 +191,7 @@ def is_forcing_win(board, move, player, EVAL_CACHE={}):
         EVAL_CACHE[key] = -1
         return True
     for follow_move in [(i, j) for i in range(len(board)) for j in range(len(board)) if new_board[i][j] == 0]:
-        test_board = deepcopy(new_board)
+        test_board = [row[:] for row in new_board]
         test_board[follow_move[0]][follow_move[1]] = player
         test_key = cache_key(test_board)
         sim.board = test_board
@@ -321,6 +326,80 @@ def chain_cut_along_axis(board, player, edge_coords):
         return not (any(y == 0 for y, _ in reached) and any(y == size - 1 for y, _ in reached))
 
 
+# ───────────────────────────────────────────────────────────────────────────────
+# Fast 0-1 Dijkstra (Numba).  Works for any board size ≤ 15 without realloc.
+# ───────────────────────────────────────────────────────────────────────────────
+@nb.njit(cache=True)
+def _dijkstra_numba(board: np.ndarray, player: int) -> np.ndarray:
+    """
+    Return a matrix of minimal 0-1 costs for `player`
+    (own stone = 0, empty = 1, opponent stone = blocked/∞).
+
+    Parameters
+    ----------
+    board  : int8[:, :]   2-D array with values {-1, 0, 1}
+    player : int          1  (white, left↔right)  or  -1 (black, top↔bottom)
+
+    Returns
+    -------
+    dist   : int16[:, :]  same shape as board,  32 767 = unreachable
+    """
+    n = board.shape[0]
+    INF = np.int16(32_767)
+
+    dist     = np.full((n, n), INF, dtype=np.int16)
+    visited  = np.zeros((n, n),  np.uint8)
+
+    # start fringe -------------------------------------------------------
+    if player == 1:                # white : any cell in column 0 (left edge)
+        for r in range(n):
+            if board[r, 0] != -player:                # not blocked by enemy
+                dist[r, 0] = 0 if board[r, 0] == player else 1
+    else:                          # black : any cell in row 0 (top edge)
+        for c in range(n):
+            if board[0, c] != -player:
+                dist[0, c] = 0 if board[0, c] == player else 1
+
+    # neighbour offsets for pointy-top hex grid
+    off_i = np.array([-1, -1,  0, 0,  1, 1], dtype=np.int8)
+    off_j = np.array([ 0,  1, -1, 1, -1, 0], dtype=np.int8)
+
+    # Dijkstra over ≤ 49 nodes → simple O(V²) scan is faster than a heap
+    while True:
+        # pick the unvisited node with the current smallest distance
+        best = INF
+        bi = bj = -1
+        for i in range(n):
+            for j in range(n):
+                if visited[i, j] == 0 and dist[i, j] < best:
+                    best = dist[i, j]
+                    bi, bj = i, j
+        if bi == -1:               # nothing left reachable
+            break
+        visited[bi, bj] = 1
+
+        # early out – we reached target side
+        if (player == 1 and bj == n - 1) or (player == -1 and bi == n - 1):
+            break
+
+        # relax the 6 neighbours
+        for k in range(6):
+            ni = bi + off_i[k]
+            nj = bj + off_j[k]
+            if ni < 0 or nj < 0 or ni >= n or nj >= n:
+                continue
+
+            if board[ni, nj] == -player:              # blocked
+                continue
+
+            step_cost = 0 if board[ni, nj] == player else 1
+            nd = np.int16(dist[bi, bj] + step_cost)
+            if nd < dist[ni, nj]:
+                dist[ni, nj] = nd
+
+    return dist
+
+
 def dijkstra_shortest_paths(
     start_nodes: List[Coordinate],
     neighbor_fn: Callable[[Coordinate], List[Coordinate]],
@@ -350,38 +429,37 @@ def dijkstra_shortest_paths(
 
 
 # 2. Compute the full shortest path
-def shortest_connection_path(board: List[List[int]], player: int) -> Optional[List[Coordinate]]:
-    size = len(board)
-    adjacency = get_adjacency_map(size)
+def shortest_connection_path(board, player):
+    board_arr = np.asarray(board, dtype=np.int8)
+    dist      = _dijkstra_numba(board_arr, player)
 
-    if player == 1:  # White: left-to-right
-        starts = [(r, 0) for r in range(size) if board[r][0] != -1]
-        goals = {(r, size - 1) for r in range(size)}
-    else:  # Black: top-to-bottom
-        starts = [(0, c) for c in range(size) if board[0][c] != 1]
-        goals = {(size - 1, c) for c in range(size)}
-
-    if not starts:
-        return None
-
-    def neighbor_fn(coord: Coordinate) -> List[Coordinate]:
-        return [n for n in adjacency[coord] if board[n[0]][n[1]] != -player]
-
-    def cost_fn(coord: Coordinate) -> int:
-        return 0 if board[coord[0]][coord[1]] == player else 1
-
-    dist, prev = dijkstra_shortest_paths(starts, neighbor_fn, cost_fn, goals)
-
-    reachable = [g for g in goals if g in dist]
+    n = len(board)
+    # (1) pick the goal cell with minimal distance
+    goals = (
+        [(r, n - 1) for r in range(n)] if player == 1
+        else [(n - 1, c) for c in range(n)]
+    )
+    reachable = [g for g in goals if dist[g] < 32_000]
     if not reachable:
         return None
+    gi, gj = min(reachable, key=lambda g: dist[g])
 
-    goal = min(reachable, key=lambda g: dist[g])
-    path: List[Coordinate] = []
-    cur = goal
-    while cur is not None:
-        path.append(cur)
-        cur = prev[cur]
+    # (2) reconstruct by greedy steepest-descent on the dist matrix
+    path = [(gi, gj)]
+    while True:
+        ci, cj = path[-1]
+        if (player == 1 and cj == 0) or (player == -1 and ci == 0):
+            break  # back at a start cell
+        best_n  = None
+        best_d  = dist[ci, cj]
+        for di, dj in [(-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0)]:
+            ni, nj = ci + di, cj + dj
+            if 0 <= ni < n and 0 <= nj < n and dist[ni, nj] < best_d:
+                best_d = dist[ni, nj]
+                best_n = (ni, nj)
+        if best_n is None:  # shouldn’t happen
+            break
+        path.append(best_n)
     return list(reversed(path))
 
 

@@ -29,7 +29,7 @@ class HexEnv(gym.Env):
         if self.render_mode == "human":
             pygame.init()
             # off-screen buffer; reused every call
-            self._surface = pygame.Surface((800, 800)).convert()
+            self._surface = pygame.Surface((1000, 1000)).convert()
             if self.render_mode == "human":
                 # visible window
                 self._screen = pygame.display.set_mode(
@@ -39,7 +39,7 @@ class HexEnv(gym.Env):
         elif self.render_mode == "rgb_array":
             pygame.init()
             # make an off-screen surface that does NOT depend on display format
-            self._surface = pygame.Surface((800, 800), flags=pygame.SRCALPHA)
+            self._surface = pygame.Surface((1000, 1000), flags=pygame.SRCALPHA)
 
     # -------------------------------------------------------------
     # Gym reset ---------------------------------------------------
@@ -79,28 +79,35 @@ class HexEnv(gym.Env):
     # -------------------------------------------------------------
     # Gym render --------------------------------------------------
     # -------------------------------------------------------------
-    def render(self):
-        if self.render_mode is None:
-            raise ValueError("render_mode was None, set it in __init__")
+    def render(self, *_, **__):
+        mode = self.render_mode
+        if mode not in self.metadata["render_modes"]:
+            raise ValueError(f"unsupported render_mode={mode!r}")
 
-        # draw current board onto self._surface via your helper modules
-        from reil_hex_game.hex_engine.hex_pygame import (
-            game_state, game_draw
-        )
+        # ---- build the two lists of coordinates (what draw_frame expects) ----
+        white, black = [], []
+        for r in range(self.size):
+            for c in range(self.size):
+                cell = self.game.board[r][c]
+                if cell == 1:
+                    white.append((r, c))
+                elif cell == -1:
+                    black.append((r, c))
+
+        from reil_hex_game.hex_engine.hex_pygame import game_state, game_draw
         gs = game_state.GameState()
-        gs.board = [row[:] for row in self.game.board]  # copy current board
-        game_draw.draw_frame(self._surface, gs, flip=False)         # renders one frame
+        gs.white_hexes = white          # <──── draw_frame looks at these!
+        gs.black_hexes = black
+        game_draw.draw_frame(self._surface, gs, flip=False)
 
-        if self.render_mode == "human":
+        if mode == "human":
             self._screen.blit(self._surface, (0, 0))
             pygame.display.flip()
-            pygame.event.pump()   # keeps window responsive
+            pygame.event.pump()
             return None
         else:  # "rgb_array"
-            # (W,H,3) → transpose to (H,W,3); copy to contiguous uint8
-            frame = np.transpose(
-                surfarray.array3d(self._surface), (1, 0, 2)
-            ).copy()
+            frame = np.transpose(pygame.surfarray.array3d(self._surface),
+                                (1, 0, 2)).copy()
             return frame
 
     # -------------------------------------------------------------
