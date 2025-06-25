@@ -463,7 +463,7 @@ class hexPosition (object):
                     break
             else:
                 gs.status_message = 'Bot is thinking…'
-                chosen = machine(self.board, self.get_action_space())
+                chosen = machine(self.board, self.get_action_space(), print_debug=True)
                 self.move(chosen)
                 gs.status_message = 'Your turn - click a hex'
 

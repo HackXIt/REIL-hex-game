@@ -84,7 +84,7 @@ def draw_end_zones(surface, game: GameState):
         draw_hex_bottom_border(surface, game, tile, player_two_colour)
 
 
-def draw_frame(surface, game: GameState):
+def draw_frame(surface, game: GameState, flip=True):
     surface.fill(game.background_colour)
 
     draw_board(surface, game)
@@ -99,4 +99,5 @@ def draw_frame(surface, game: GameState):
         rect.top     = 20                            # 20 px below window edge
         surface.blit(txt, rect)
 
-    pygame.display.flip()
+    if flip:
+        pygame.display.flip()

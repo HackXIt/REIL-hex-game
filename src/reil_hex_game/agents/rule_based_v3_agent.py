@@ -34,7 +34,7 @@ LAST_MOVE_IS_BRIDGE = False
 # NOTE THE NAME of the agent function MUST match the filename!
 # Otherwise the agent resolver will not find it.
 # When using an agent like 'uv run reil-hex-game --agent rule_based_v4' the 'agent' at the can be omitted
-def rule_based_v3_agent(board, action_set):
+def rule_based_v3_agent(board, action_set, print_debug=False):
     # global is necessary to ACTUALLY mutate the global variables
     global LAST_PLAYER, STRATEGY_USE_COUNT, LAST_MOVE_IS_BRIDGE
 
@@ -49,15 +49,15 @@ def rule_based_v3_agent(board, action_set):
     # ------------------------------------------------------------------ #
     for move in action_set:
         if is_winning_move(board, move, player,  EVAL_CACHE):
-            print(f"Immediate winning move found: {move}")
+            print(f"Immediate winning move found: {move}") if print_debug else None
             return move
         if is_winning_move(board, move, opponent, EVAL_CACHE):
-            print(f"🛡️  Blocking opponent's immediate win: {move}")
+            print(f"🛡️  Blocking opponent's immediate win: {move}") if print_debug else None
             return move
 
     for move in action_set:
         if is_forcing_win(board, move, player, EVAL_CACHE):
-            print(f"Forcing 2-step win move found: {move}")
+            print(f"Forcing 2-step win move found: {move}") if print_debug else None
             return move
 
     # ------------------------------------------------------------------ #
@@ -119,10 +119,10 @@ def rule_based_v3_agent(board, action_set):
         total_move_scores[move] = total_move_scores.get(move, 0) + weight
 
     # Debug print — show scores that are >0
-    print("\n(Suggested moves) : total score for the move collected over all strategies:")
+    print("\n(Suggested moves) : total score for the move collected over all strategies:") if print_debug else None
     for mv, sc in sorted(total_move_scores.items(), key=lambda x: -x[1]):
         if sc > 0:
-            print(f"  {mv}: {sc}")
+            print(f"  {mv}: {sc}") if print_debug else None
 
     # ------------------------------------------------------------------ #
     # 4️⃣  Choose a move (fallback to random if no strategy suggested a move)
@@ -138,15 +138,13 @@ def rule_based_v3_agent(board, action_set):
     # ------------------------------------------------------------------ #
     # 5️⃣  Update per-strategy usage count, list contributors
     # ------------------------------------------------------------------ #
-    print(f"\nChosen move: {chosen_move} with score {max_score}")
-    print("Strategies that suggested this move:")
+    print(f"\nChosen move: {chosen_move} with score {max_score}") if print_debug else None
+    print("Strategies that suggested this move:") if print_debug else None
     for name, move in suggestions.items():
         if move == chosen_move:
             STRATEGY_USE_COUNT[name] += 1
-            print(f"  {name}: +{STRATEGY_WEIGHTS[name]}")
+            print(f"  {name}: +{STRATEGY_WEIGHTS[name]}") if print_debug else None
             if name == "make_own_bridge":
                 LAST_MOVE_IS_BRIDGE = True
-
-
-
+    # ------------------------------------------------------------------ #
     return chosen_move

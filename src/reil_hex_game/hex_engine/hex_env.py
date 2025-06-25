@@ -89,7 +89,7 @@ class HexEnv(gym.Env):
         )
         gs = game_state.GameState()
         gs.board = [row[:] for row in self.game.board]  # copy current board
-        game_draw.draw_frame(self._surface, gs)         # renders one frame
+        game_draw.draw_frame(self._surface, gs, flip=False)         # renders one frame
 
         if self.render_mode == "human":
             self._screen.blit(self._surface, (0, 0))
