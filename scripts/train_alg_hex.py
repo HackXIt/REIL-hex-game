@@ -20,8 +20,8 @@ from datetime import datetime
 _ALGOS = {
     "ppo":        "ppo_train",
     "a2c":        "a2c_train",
-    "reinforce":  "reinforce_train",
-    "alphazero":  "az_train",
+    # "reinforce":  "reinforce_train",
+    # "alphazero":  "az_train",
 }
 
 def parse_timesteps(x: str) -> int:
