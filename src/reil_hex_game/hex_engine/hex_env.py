@@ -79,6 +79,8 @@ class HexEnv(gym.Env):
     # Gym step ----------------------------------------------------
     # -------------------------------------------------------------
     def step(self, action: int):
+        agent_action_coord = self.game.scalar_to_coordinates(action)
+        strategy_match_info = self._check_agent_strategy_match(agent_action_coord)
         # Handle illegal moves by ending the episode with a large penalty.
         if action not in self._legal_scalar_moves():
             reward, terminated, truncated = -1.0, True, False
@@ -95,9 +97,8 @@ class HexEnv(gym.Env):
             return self._obs(), reward, terminated, truncated, info
 
         # Execute the legal move
-        coord = self.game.scalar_to_coordinates(action)
         current_player_before_move = self.game.player
-        self.game.move(coord)
+        self.game.move(agent_action_coord)
 
         terminated = self.game.winner != 0
         truncated = False
@@ -109,7 +110,7 @@ class HexEnv(gym.Env):
              sparse_r *= -1 # Ensure reward is from the perspective of the mover
 
         # Calculate potential-based shaping reward
-        new_pot, strategy_info = self._potential()
+        new_pot, potential_info = self._potential()
         shaping = self._GAMMA * new_pot - self._last_potential
         self._last_potential = new_pot
 
@@ -122,7 +123,8 @@ class HexEnv(gym.Env):
             "potential": new_pot,
             "raw_reward": sparse_r,
         }
-        info.update(strategy_info) # Add individual strategy potentials
+        info.update(strategy_match_info) # Add agent strategy matches
+        info.update(potential_info) # Add individual strategy potentials
 
         if terminated:
             ### VERIFICATION: Added terminal info for Monitor wrapper to log.
@@ -133,6 +135,30 @@ class HexEnv(gym.Env):
             info["terminal_observation"] = self._obs()
 
         return self._obs(), reward, terminated, truncated, info
+    
+    def _check_agent_strategy_match(self, agent_action_coord: tuple) -> dict:
+        """
+        Checks if the agent's action matches any rule-based strategy suggestions.
+        Returns a dictionary for logging, e.g., {'agent_matches_take_center': 1.0}.
+        """
+        from reil_hex_game.agents import rule_based_helper as rh
+        
+        info = {}
+        # Ensure we check from the perspective of the player whose turn it is
+        player = self._to_move()
+        board = self.game.board
+        action_set = self.game.legal_moves()
+
+        if not hasattr(self, "_strat_fns"):
+            self._strat_fns = rh.STRATEGY_FUNCTIONS
+
+        for name, fn in self._strat_fns.items():
+            # Check if the heuristic suggests the same move the agent made
+            suggested_move = fn(board, action_set, player)
+            if suggested_move and suggested_move == agent_action_coord:
+                info[f"agent_matches_{name}"] = 1.0
+        
+        return info
 
     def action_masks(self):
         """Returns a boolean mask for legal actions."""

@@ -18,31 +18,31 @@ EXPERIMENTS = [
         "name": "E1_PPO_FixedSide_vs_Random",
         "wrapper_type": "opponent",
         "rule_fraction": 0.0,
-        "timesteps": 1_000_000,
+        "timesteps": 500_000,
     },
     {
         "name": "E2_PPO_SideSwap_vs_Random",
         "wrapper_type": "two_player",
         "rule_fraction": 0.0,
-        "timesteps": 1_000_000,
+        "timesteps": 500_000,
     },
     {
         "name": "E3_PPO_Curriculum_50_Rules",
         "wrapper_type": "two_player",
         "rule_fraction": 0.5,
-        "timesteps": 2_000_000,
+        "timesteps": 500_000,
     },
     {
         "name": "E4_PPO_Curriculum_90_Rules",
         "wrapper_type": "two_player",
         "rule_fraction": 0.9,
-        "timesteps": 2_000_000,
+        "timesteps": 500_000,
     },
     {
         "name": "E5_PPO_SelfPlay_vs_E4",
         "wrapper_type": "two_player",
         "rule_fraction": 0.0,  # All opponents will be the previous best model
-        "timesteps": 2_000_000,
+        "timesteps": 500_000,
         "self_play_from": "E4_PPO_Curriculum_90_Rules", # Use the best model from E4
     },
 ]
