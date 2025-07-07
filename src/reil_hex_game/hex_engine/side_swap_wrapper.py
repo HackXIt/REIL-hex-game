@@ -1,88 +1,99 @@
-# reil_hex_game/hex_engine/side_swap_wrapper.py
 import gymnasium as gym
 import numpy as np
 import random
 
 class SideSwapWrapper(gym.Wrapper):
     """
-    At reset() randomly chooses which side the *learning* agent will play.
-    * If self.agent_side ==  1 → wrapped env works as usual (agent starts).
-    * If self.agent_side == -1 → opponent moves first; observations and
-      rewards are flipped so the policy always 'thinks' it is P1.
+    A final, unified wrapper for the Hex environment that correctly handles
+    two-player logic, perspective swapping, and detailed information logging
+    for TensorBoard.
     """
     def __init__(self, env, opponent_fn, prob_start_first: float = 0.5):
         super().__init__(env)
         self.opponent_fn = opponent_fn
         self.prob_start_first = prob_start_first
-        self.agent_side = 1               # will be set at every reset()
+        self.agent_side = 1
 
-    # ─────────────────────────────────────────────────────────────
+    @staticmethod
+    def get_last_strategy():
+        """
+        Fetches the last used strategy name from the rule_based_helper module.
+        This is crucial for detailed logging of the opponent's behavior.
+        """
+        try:
+            from reil_hex_game.agents import rule_based_helper
+            return rule_based_helper.LAST_STRATEGY_USED
+        except (ImportError, AttributeError):
+            return "unknown" # Fallback if not a rule-based agent
+
     def reset(self, **kw):
         obs, info = self.env.reset(**kw)
-
-        # 1. decide sides
         self.agent_side = 1 if random.random() < self.prob_start_first else -1
+        self.unwrapped.agent_player_id = self.agent_side
 
-        # 2. if opponent starts, let it move immediately
         if self.agent_side == -1:
-            board   = self.env.game.board
-            legal   = self.env.game.legal_moves()
-            opp_mv  = self.opponent_fn(board, legal)
-            self.env.game.move(opp_mv)         # opponent makes first move
-            obs = self._transform_obs(self.env._obs())   # flip perspective
-
+            board = self.env.game.board
+            legal_moves = self.env.game.legal_moves()
+            if legal_moves:
+                opp_mv = self.opponent_fn(board, legal_moves)
+                self.env.game.move(opp_mv)
+            obs = self._transform_obs(self.env._obs())
         return obs, info
 
-    # ─────────────────────────────────────────────────────────────
     def step(self, action):
+        # --- 1. Agent's Move ---
+        actual_action = self._flip_scalar(action) if self.agent_side == -1 else action
+        obs, reward, terminated, truncated, info = self.env.step(actual_action)
+
+        if terminated or truncated:
+            final_reward = -reward if self.agent_side == -1 else reward
+            if self.agent_side == -1:
+                obs = self._transform_obs(obs)
+            return obs, final_reward, terminated, truncated, info
+
+        # --- 2. Opponent's Move ---
+        board = self.env.game.board
+        legal_moves = self.env.game.legal_moves()
+        if not legal_moves:
+            return obs, reward, True, truncated, info
+
+        opp_mv = self.opponent_fn(board, legal_moves)
+        self.env.game.move(opp_mv)
+
+        # --- 3. Final State, Reward, and Info Calculation ---
+        terminated = self.env.game.winner != 0
+        final_obs = self.env._obs()
+
+        # The base reward is the shaping value from the agent's move.
+        final_reward = reward
+        if terminated:
+            # If the game ends, override with the definitive win/loss reward.
+            final_reward = 1.0 if self.env.game.winner == self.agent_side else -1.0
+
+        # --- 4. Logging and Perspective Transformation ---
+        # The `info` dict from env.step already contains shaping/potential info.
+        # We add the opponent's strategy info here.
+        info['opponent_strategy'] = self.get_last_strategy()
+
         if self.agent_side == -1:
-            # incoming action is in 'flipped' coordinates
-            action = self._flip_scalar(action)
+            final_obs = self._transform_obs(final_obs)
+            final_reward = -final_reward
 
-        obs, r, term, trunc, info = self.env.step(action)
+        return final_obs, final_reward, terminated, truncated, info
 
-        # opponent’s turn if not finished
-        if not (term or trunc):
-            board  = self.env.game.board
-            legal  = self.env.game.legal_moves()
-            opp_mv = self.opponent_fn(board, legal)
-            self.env.game.move(opp_mv)
-            # reward sign flips because opponent moved
-            r = -r
-            term = self.env.game.winner != 0
-            obs = self.env._obs()
-
-        # finally, if we are P-1, transform back to agent’s canonical view
-        if self.agent_side == -1:
-            r   = -r                         # win for P-1 => +1 for agent
-            obs = self._transform_obs(obs)
-
-        return obs, r, term, trunc, info
-
-    # ─────────────────────────────────────────────────────────────
-    # helpers
-    def _flip_scalar(self, scalar_idx: int) -> int:
-        """Mirror a 0..N²-1 index around the main diagonal."""
-        size = self.env.size
-        row, col = divmod(scalar_idx, size)
-        flipped_idx = col * size + row
-        return flipped_idx
-
-    def _transform_obs(self, obs: np.ndarray) -> np.ndarray:
-        """
-        Swap channel-0 and channel-1 so agent always sees itself as 'red'
-        (P1).  Also flip the 'who-to-move' flag.
-        """
-        obs = obs.copy()
-        obs[[0, 1]] = obs[[1, 0]]          # swap stone layers
-        obs[2]      = 1.0 - obs[2]         # invert turn map (1↔0)
-        return obs
-
-    # forward legality mask so ActionMasker still works
     def action_masks(self):
         mask = self.env.action_masks()
         if self.agent_side == -1:
-            # mirror mask the same way we mirror observations
-            flat_mask = mask.reshape(self.env.size, self.env.size).T.ravel()
-            return flat_mask
+            return mask.reshape(self.env.size, self.env.size).T.ravel()
         return mask
+
+    def _flip_scalar(self, scalar_idx: int) -> int:
+        size = self.env.size
+        row, col = divmod(scalar_idx, size)
+        return col * size + row
+
+    def _transform_obs(self, obs: np.ndarray) -> np.ndarray:
+        obs = obs.copy()
+        obs[[0, 1]] = obs[[1, 0]]
+        obs[2] = 1.0 - obs[2]
+        return obs

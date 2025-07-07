@@ -51,6 +51,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Root directory where checkpoints & logs go")
     p.add_argument("--device", default="auto",
                    help="'cpu', 'cuda', or 'auto' (SB3 style)")
+    p.add_argument("--wrapper-type", choices=["opponent", "two_player"], default="two_player", help="Which environment wrapper to use for training.")
+    p.add_argument("--opponent-model-path", type=str, default=None, help="Path to a model file for a PPO self-play opponent.")
     p.add_argument("--resume", action="store_true",
                    help="Continue training from the latest checkpoint "
                         "in --save-dir")

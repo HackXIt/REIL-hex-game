@@ -2,7 +2,7 @@
 from __future__ import annotations
 import multiprocessing as mp
 import random
-from collections import Counter
+from collections import Counter, defaultdict
 import warnings
 import numpy as np
 
@@ -57,22 +57,52 @@ def _masked_predict(model, obs, env, deterministic=True):
 # TensorBoard callback for agent/opponent strategies
 # ────────────────────────────────────────────────────────────
 class StrategyTBCallback(BaseCallback):
-    def __init__(self, log_dir: str, flush_freq: int = 1_000):
+    """
+    A custom callback for logging all numeric values from the info dict
+    to TensorBoard. It also handles the opponent strategy logging.
+    """
+    def __init__(self, log_dir: str, flush_freq: int = 1000):
         super().__init__()
+        self.log_dir = log_dir
         self.flush_freq = flush_freq
-        self.writer = SummaryWriter(log_dir)
-        self.step_counter: Counter[str] = Counter()
+        self.writer = None # Will be set in _on_training_start
+        self.info_buffer = defaultdict(list)
+        self.strategy_counter = defaultdict(int)
+
+    def _on_training_start(self) -> None:
+        if self.writer is None:
+            self.writer = SummaryWriter(log_dir=self.log_dir)
 
     def _on_step(self) -> bool:
-        for info in self.locals["infos"]:
-            if (name := info.get("opponent_strategy")):
-                self.step_counter[name] += 1
+        for info in self.locals.get("infos", []):
+            # Log all numeric values from the info dict
+            for key, value in info.items():
+                if isinstance(value, (int, float)):
+                    self.info_buffer[key].append(value)
+            
+            # Special handling for opponent strategy (if present)
+            if "opponent_strategy" in info:
+                self.strategy_counter[info["opponent_strategy"]] += 1
 
         if self.num_timesteps % self.flush_freq == 0:
-            for k, v in self.step_counter.items():
-                self.writer.add_scalar(f"strategies/opponent/{k}", v, self.num_timesteps)
-            self.step_counter.clear()
+            # Log the mean of the buffered info values
+            for key, values in self.info_buffer.items():
+                if values:
+                    self.writer.add_scalar(f"step_info/{key}", np.mean(values), self.num_timesteps)
+            
+            # Log strategy counts
+            for key, value in self.strategy_counter.items():
+                self.writer.add_scalar(f"strategies/{key}", value, self.num_timesteps)
+
+            # Clear buffers
+            self.info_buffer.clear()
+            self.strategy_counter.clear()
+            
         return True
+
+    def _on_training_end(self) -> None:
+        if self.writer:
+            self.writer.close()
 
 
 class FastEval(EvalCallback):

@@ -2,6 +2,7 @@
 .vscode/.history
 
 # RL 
+old-runs/
 runs/
 *.zip
 *.npz
