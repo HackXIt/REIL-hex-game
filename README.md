@@ -154,15 +154,33 @@ uv run reil-hex-game <... CLI options>
 
 ## 🤖 Training
 
-The project includes training scripts for both A2C and PPO algorithms. Other algorithms have not been implemented yet, but the structure is in place to easily add them in the future.
+The project includes training scripts for both **A2C (Advantage Actor-Critic)** and **PPO (Proximal Policy Optimization)** algorithms. These scripts are responsible for setting up the reinforcement learning environment, configuring the agent's policy network, and running the training loop.
 
 ### A2C Training
 
-The [`scripts/a2c_train.py`](scripts/a2c_train.py) script trains an agent using the A2C algorithm. It sets up the environment, policy, and callbacks for training. It supports training against a mix of rule-based opponents to improve the agent's robustness.
+The [`a2c_train.py`](scripts/a2c_train.py) script trains an agent using the A2C algorithm. Here's a breakdown of the training process:
+
+-   **Opponent Mix**: The training environment is configured to use a mix of different opponents to improve the agent's robustness. This includes various versions of the rule-based agent (`rule_based_v3_agent`, `rule_based_v4_agent`) and a random agent. The proportion of each opponent type can be adjusted.
+-   **Vectorized Environments**: The script uses `SubprocVecEnv` to run multiple environments in parallel, which significantly speeds up the training process by collecting more experience in less time.
+-   **Action Masking**: To ensure the agent only selects legal moves, the `ActionMasker` wrapper is used. This wrapper provides a mask of legal actions to the agent at each step.
+-   **Callbacks**: Several callbacks are used during training:
+    -   `CheckpointCallback`: Saves the model at regular intervals.
+    -   `FastEval`: A modified evaluation callback that periodically evaluates the agent's performance against a strong opponent (`rule_based_v4_agent`).
+    -   `StrategyTBCallback`: Logs the usage of different opponent strategies to TensorBoard for analysis.
 
 ### PPO Training
 
-The [`scripts/ppo_train.py`](scripts/ppo_train.py) script trains an agent using the PPO algorithm, including a maskable PPO variant to handle illegal moves. Similar to the A2C script, it allows for training against different opponent types.
+The [`ppo_train.py`](scripts/ppo_train.py) script trains an agent using the PPO algorithm, which is known for its stability and performance. The process is similar to A2C training but with a key difference in the algorithm used:
+
+-   **Maskable PPO**: This script uses `MaskablePPO` from the `sb3-contrib` library. This version of PPO is specifically designed to handle environments with invalid actions, making it a perfect fit for Hex where not all board positions are playable at any given time.
+-   **Opponent and Environment Setup**: The opponent mix, vectorized environments, and action masking are set up in the same way as the A2C training script.
+-   **Side Swap Wrapper**: To mitigate the first-player advantage in Hex, the `SideSwapWrapper` is used. This wrapper randomly decides which side the learning agent will play at the beginning of each episode.
+-   **Policy and Callbacks**: The PPO agent also uses the `CnnPolicy` with the `HexCNN` feature extractor. The same set of callbacks (`CheckpointCallback`, `FastEval`, `StrategyTBCallback`) are used to monitor and save the training progress.
+-   **Hyperparameters**: The PPO script uses a different set of hyperparameters (e.g., `n_steps`, `batch_size`, `n_epochs`) that are more suitable for the PPO algorithm.
+
+#### HexCNN Feature Extractor
+
+A custom feature extractor, [`HexCNN`](src/reil_hex_game/agents/hex_cnn.py), is used to process the game's state. The board is represented as a 3-channel tensor (player 1's stones, player -1's stones, and a turn indicator). The `HexCNN` consists of two convolutional layers followed by a linear layer. This architecture allows the agent to learn spatial patterns and relationships between the stones on the board, which is crucial for developing effective strategies in Hex.
 
 -----
 
