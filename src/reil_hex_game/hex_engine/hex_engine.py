@@ -4,11 +4,9 @@
 # ------------------------------------------------------------------
 # This version augments the classical text-only engine with:
 #   • Optional real-time pygame rendering (use_pygame=True)
-#   • Console output reduced to **move list only** when pygame is on
-#   • Machine-vs-machine flow controlled by the *Enter* key **inside** the
-#     pygame window (no more stdin blocking)
-#   • Automatic hook-up so the pygame window displays a status message
-#     prompting the user in MvM mode.
+#   • Choice between playing via console or pygame
+# The original hex_engine.py was provided to us by the course materials
+# We had to modify it to work well with the visualization and console interface
 # ------------------------------------------------------------------
 
 from __future__ import annotations
@@ -116,7 +114,6 @@ class hexPosition (object):
     # ==============================================================
     def _init_pygame_backend(self, size: int) -> None:
         """Starts the pygame render loop and prepares helper plumbing."""
-        from importlib import import_module
         from .hex_pygame import GameState, game_loop   # local relative import
 
         # background thread that houses the GUI event loop

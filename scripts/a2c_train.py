@@ -54,7 +54,7 @@ def _masked_predict(model, obs, env, deterministic=True):
 
 
 # ────────────────────────────────────────────────────────────
-# TensorBoard callback (unchanged)
+# TensorBoard callback for agent/opponent strategies
 # ────────────────────────────────────────────────────────────
 class StrategyTBCallback(BaseCallback):
     def __init__(self, log_dir: str, flush_freq: int = 1_000):
@@ -112,9 +112,9 @@ class FastEval(EvalCallback):
 # helper: illegal-action mask
 # --------------------------------------------------------------------------- #
 def mask_fn(env: HexEnv):
-    """Return Boolean vector – True where the move is legal."""
+    """Return Boolean vector - True where the move is legal."""
     mask = env.action_masks()
-    assert mask.any(), "mask is all-False – something is wrong in HexEnv"
+    assert mask.any(), "mask is all-False - something is wrong in HexEnv"
     return mask
 
 # --------------------------------------------------------------------------- #
@@ -150,7 +150,7 @@ def make_eval_env(board_size: int, video_folder: str | None, video_length: int =
 
 
 # ────────────────────────────────────────────────────────────
-# Training entry – called from train_alg_hex.py
+# Training entry - called from train_alg_hex.py
 # ────────────────────────────────────────────────────────────
 def train(args):
 

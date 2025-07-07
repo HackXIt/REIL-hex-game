@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> None:
     try:
         trainer = importlib.import_module(f"scripts.{mod_name}")
     except ModuleNotFoundError:
-        print(f"[ERROR] scripts/{mod_name}.py not found – create it first.",
+        print(f"[ERROR] scripts/{mod_name}.py not found - create it first.",
               file=sys.stderr)
         sys.exit(1)
 
