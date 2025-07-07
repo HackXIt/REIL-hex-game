@@ -195,6 +195,26 @@ The exported TorchScript model can be loaded and used by the [`tscript_agent.py`
 
 -----
 
+## Rule-Based Agent
+
+The project includes a rule-based agent that uses a set of predefined strategies to play the game. The logic for these strategies is implemented in the [`rule_based_helper.py`](src/reil_hex_game/agents/rule_based_helper.py) file. The agent can be used as a baseline for comparison against reinforcement learning agents.
+
+A documentation about these strategies can be found in the [`docs/hex-game-strategies.md`](docs/hex-game-strategies.md) file. The rule-based agent is designed to play against human players or other agents, providing a simple but better than random opponent.
+
+The various strategies implemented in the rule-based agent include:
+- `take_center`: Suggests playing in the center of the board.
+- `extend_own_chain`: Focuses on extending existing chains of the player's stones.
+- `shortest_connection`: Finds the shortest path to victory.
+- `break_opponent_bridge`: Identifies and breaks the opponent's bridges.
+- `protect_own_chain_from_cut`: Protects the player's chains from being cut by the opponent.
+- `create_double_threat`: Creates a situation where the player has two winning moves available.
+- `make_own_bridge`: Suggests moves that create a bridge for the player.
+- `mild_block_threat`: Blocks the opponent's threats without being too aggressive.
+- `advance_toward_goal`: Moves towards the player's goal.
+- `block_aligned_opponent_path`: Blocks the opponent's most direct path.
+
+-----
+
 ## Hex Game Visualization
 
 The game can be visualized using Pygame. The visualization logic is located in [`src/reil_hex_game/hex_engine/hex_pygame/`](src/reil_hex_game/hex_engine/hex_pygame/). This module is based on the [`hex-py`](https://github.com/parappayo/hex-py/) project by [Parappayo](https://github.com/parappayo/). Special credit goes to the original author for the implementation. The code was modified to fit with the pre-existing `hex_engine` logic and synchronize with the game state.
