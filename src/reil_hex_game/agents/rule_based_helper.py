@@ -32,7 +32,7 @@ LAST_STRATEGY_USED: str | None = None
 # -------------------------------------------------------------------------------
 # GENERAL HELPER FUNCTIONS FOR RULE BASED AGENT
 # -------------------------------------------------------------------------------
-def _bump_strategy(name: str) -> None:
+def bump_strategy(name: str) -> None:
     """Increment global usage count for `name`."""
     global LAST_STRATEGY_USED
     LAST_STRATEGY_USED = name
@@ -561,7 +561,6 @@ def take_center(board, action_set, player):
     """
     if not action_set:
         return None
-    _bump_strategy("take_center")
     size = len(board)
     center = (size // 2, size // 2)
     return min(action_set, key=lambda move: _euclid(move, center))
@@ -571,7 +570,6 @@ def extend_own_chain(board, action_set, player):
     """
     
     """
-    _bump_strategy("extend_own_chain")
     size = len(board)
     adjacency_map = get_adjacency_map(size)
 
@@ -609,7 +607,6 @@ def extend_own_chain(board, action_set, player):
 
 
 def shortest_connection(board: List[List[int]], action_set: List[Coordinate], player: int) -> Optional[Coordinate]:
-    _bump_strategy("shortest_connection")
     best_move = None
     best_cost = float('inf')
     for move in action_set:
@@ -651,7 +648,6 @@ def break_opponent_bridge(board, action_set, player):
         tuple[int, int] or None: The coordinates (row, col) of a move that breaks an opponent's bridge,
                                  or None if no such move is found.
     """
-    _bump_strategy("break_opponent_bridge")
     size = len(board)
     enemy = -player
     for i in range(size):
@@ -684,7 +680,6 @@ def protect_own_chain_from_cut(board, action_set, player):
     Returns:
         tuple[int, int] or None: The (row, column) action that protects the player's chain, or None if no such action exists.
     """
-    _bump_strategy("protect_own_chain_from_cut")
     for i, j in action_set:
         board[i][j] = player
         cut = is_cut_point(board, player)
@@ -713,7 +708,6 @@ def create_double_threat(board, action_set, player):
         This function assumes the existence of a helper function `get_neighbors(i, j, size)` that returns the neighboring positions
         of a given cell (i, j) on the board of the specified size.
     """
-    _bump_strategy("create_double_threat")
     size = len(board)
     clusters = []
     visited = set()
@@ -774,7 +768,6 @@ def make_own_bridge(board: List[List[int]], action_set: List[Coordinate], player
 
     if not candidates:
         return None
-    _bump_strategy("make_own_bridge")
 
     # Separate directional vs basic bridges
     directional = [c for c in candidates if abs(c[1]) + abs(c[2]) > 2]
@@ -805,7 +798,6 @@ def mild_block_threat(board: List[List[int]], action_set: List[Coordinate], play
     """
     if not action_set:
         return None
-    _bump_strategy("mild_block_threat")
 
     if player is None:
         player = infer_player(board)
@@ -843,7 +835,6 @@ def advance_toward_goal(board, action_set, player):
     """
     if not action_set:
         return None
-    _bump_strategy("advance_toward_goal")
 
     size = len(board)
 
@@ -891,7 +882,6 @@ def block_aligned_opponent_path(board: List[List[int]], action_set: List[Coordin
     if not candidates:
         return None
 
-    _bump_strategy("block_aligned_opponent_path")
     # Prioritize moves closest to the center (on the other axis)
     return min(
         candidates,
@@ -954,5 +944,5 @@ def _summary_atexit():
 
 __all__ = [
     "HEX_NEIGHBORS", "STRATEGY_FUNCTIONS", "STRATEGIES", "LAST_STRATEGY_USED",
-    "is_winning_move", "is_forcing_win", "infer_player", "fallback_random",
+    "is_winning_move", "is_forcing_win", "infer_player", "fallback_random", "bump_strategy"
 ]

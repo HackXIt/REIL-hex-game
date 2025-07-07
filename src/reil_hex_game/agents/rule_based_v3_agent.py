@@ -4,8 +4,9 @@ from ..hex_engine.hex_engine import hexPosition
 from copy import deepcopy
 from .rule_based_helper import (
     STRATEGY_FUNCTIONS as BASE_STRATEGIES,  # ← just an alias
+    LAST_STRATEGY_USED,
     HEX_NEIGHBORS, is_winning_move, is_forcing_win,
-    infer_player, fallback_random,
+    infer_player, fallback_random, bump_strategy
 )
 
 # Work on a *copy* so other agents are unaffected
@@ -134,17 +135,29 @@ def rule_based_v3_agent(board, action_set, print_debug=False):
         max_score = max(total_move_scores.values())
         best_moves = [m for m, s in total_move_scores.items() if s == max_score]
         chosen_move = random.choice(best_moves)
+        contributing_strategies = [
+            name for name, move in suggestions.items() if move == chosen_move
+        ]
+        
+        if contributing_strategies:
+            # Find the contributor with the highest weight
+            winning_strategy = max(
+                contributing_strategies,
+                key=lambda name: STRATEGY_WEIGHTS.get(name, 0)
+            )
+            bump_strategy(winning_strategy)
+            
+            # Preserve the logic for tracking bridge moves
+            if winning_strategy == "make_own_bridge":
+                LAST_MOVE_IS_BRIDGE = True
+        else:
+            bump_strategy("unknown_heuristic") # Should not happen, but is a safe fallback
 
     # ------------------------------------------------------------------ #
     # 5️⃣  Update per-strategy usage count, list contributors
     # ------------------------------------------------------------------ #
-    print(f"\nChosen move: {chosen_move} with score {max_score}") if print_debug else None
-    print("Strategies that suggested this move:") if print_debug else None
-    for name, move in suggestions.items():
-        if move == chosen_move:
-            STRATEGY_USE_COUNT[name] += 1
-            print(f"  {name}: +{STRATEGY_WEIGHTS[name]}") if print_debug else None
-            if name == "make_own_bridge":
-                LAST_MOVE_IS_BRIDGE = True
-    # ------------------------------------------------------------------ #
+    if print_debug:
+        print(f"\nChosen move: {chosen_move} (Score: {total_move_scores.get(chosen_move, 0)})")
+        print(f"Winning Strategy: {LAST_STRATEGY_USED}")
+
     return chosen_move
