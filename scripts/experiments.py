@@ -1,5 +1,6 @@
 import subprocess
 import json
+import re
 from pathlib import Path
 
 # ==============================================================================
@@ -47,22 +48,40 @@ EXPERIMENTS = [
     },
 ]
 
+def get_steps_from_filename(p: Path) -> int:
+        """Extracts the step number from a checkpoint filename."""
+        # Use regex to find the number in 'model_100000_steps.zip'
+        match = re.search(r"model_(\d+)_steps", p.stem)
+        if match:
+            return int(match.group(1))
+        return 0 # Fallback for unexpected filenames
+
 def find_latest_model(run_name: str) -> Path:
-    """Finds the latest model checkpoint in a given run directory."""
+    """
+    Finds the latest model checkpoint in a given run directory.
+    It correctly handles 'model_..._steps.zip' and 'final.zip'.
+    """
     run_dir = Path("runs") / run_name
     if not run_dir.is_dir():
         raise FileNotFoundError(f"Run directory not found for self-play opponent: {run_dir}")
 
+    final_model = run_dir / "final.zip"
     checkpoints = list(run_dir.glob("model_*.zip"))
+
+    # If final.zip exists, it is considered the latest model.
+    if final_model.exists():
+        print(f"   Found 'final.zip' model for {run_name}.")
+        return final_model
+
     if not checkpoints:
-        final_model = run_dir / "final.zip"
-        if final_model.exists():
-            return final_model
-        raise FileNotFoundError(f"No models found in {run_dir}")
+        raise FileNotFoundError(f"No models ('final.zip' or 'model_*.zip') found in {run_dir}")
+
+    # Sort checkpoints by the extracted step number in descending order
+    checkpoints.sort(key=get_steps_from_filename, reverse=True)
     
-    # Sort by the number in the filename to find the latest
-    checkpoints.sort(key=lambda f: int(f.stem.split('_')[-1]))
-    return checkpoints[-1]
+    latest_model = checkpoints[0]
+    print(f"   Found latest checkpoint: {latest_model.name}")
+    return latest_model
 
 def main():
     """Iterates through the experiment plan and runs each training session."""

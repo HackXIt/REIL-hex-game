@@ -117,9 +117,11 @@ def mask_fn(env: HexEnv):
     return mask
 
 
-def make_train_env(board_size: int, opponent_fn, wrapper_type: str):
+def make_train_env(board_size: int, opponent_fn, wrapper_type: str, opponent_model_path: str | None = None):
     """A factory that creates a training environment with the specified wrapper."""
     def _factory():
+        if opponent_model_path:
+            set_opponent_model_path(opponent_model_path)
         env = HexEnv(board_size)
         if wrapper_type == 'opponent':
             env = OpponentWrapper(env, opponent_fn)
@@ -163,8 +165,8 @@ def train(args):
     if args.opponent_model_path:
         # Self-play mode: all opponents are the loaded PPO model
         print(f"--- Entering SELF-PLAY mode. Opponent: {args.opponent_model_path} ---")
-        set_opponent_model_path(args.opponent_model_path)
         opponents = [ppo_opponent_agent] * n_envs
+        model_path_for_factory = args.opponent_model_path
     else:
         # Curriculum mode: mix of rule-based and random opponents
         rule_frac = getattr(args, "rule_fraction", 0.5) # Default to 0.5 if not passed
@@ -178,12 +180,15 @@ def train(args):
             [random_agent] * n_random
         )
         random.shuffle(opponents)
+        model_path_for_factory = None
+    
+    env_fns = [
+        make_train_env(args.board_size, opp, args.wrapper_type, model_path_for_factory)
+        for opp in opponents
+    ]
 
     # 2. Vectorised training env (every worker already supplies a mask)
-    vec_env = SubprocVecEnv(
-        [make_train_env(args.board_size, opp, args.wrapper_type) for opp in opponents],
-        start_method="spawn",
-    )
+    vec_env = SubprocVecEnv(env_fns, start_method="spawn")
 
     # 3. Evaluation env
     video_dir = (

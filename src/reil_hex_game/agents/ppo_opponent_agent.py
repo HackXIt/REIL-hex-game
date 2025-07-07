@@ -1,6 +1,6 @@
 from pathlib import Path
 import numpy as np
-from stable_baselines3 import PPO
+from sb3_contrib import MaskablePPO as PPO
 
 # This global variable will be set by the training script
 _model = None
